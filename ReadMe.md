@@ -1,4 +1,4 @@
-`.` is the project directory.
+`.` is the project directory. All paths must be defined locally (except toolbox path).
 
 
 # Preprocessing
