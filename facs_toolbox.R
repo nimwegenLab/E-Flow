@@ -124,13 +124,35 @@ set_fsc_ssc_gates <- function(.dir, .f_par, .pattern='A1', .interactive=FALSE) {
   return(list(ListlogT=ListlogT, not.debris.gate=not.debris.gate, n2f.gate=n2f.gate))
 }
 
-preproc_facs_plate <- function(.dir, .out_dir, .f_par, .f_utils, .plot=TRUE, 
+preproc_facs_plates <- function(.dirs, .data2preproc, .f_par, .f_utils, .plot=TRUE,
                                .verbose=0,              # console output (0: silent, 1: minimalist, 2: detailled)
                                .write_format=NULL,      # formats in which to write subseted data to .out_dir (vector of strings in 'fcs', 'tab' or both)
                                .min_cells=5000,         # fraction of data to remove beofre calculating trimmed stats
                                .pdf_dim=c(2, 2, 6, 8), 	# width, height, rows, columns
                                .cache_namer = (function(.d) file.path(.d, paste(basename(.d), '_preproc.Rdata', sep=''))),
                                .force=FALSE) {          # flag to force analysing raw fcs files even if a cache file exists
+# NB: dataframes are gathered in a list and concatenated only once in order to reduce computing time.
+  .pls_l <- list(gates=list(), preproc=list(), stats=list())
+  .t0 <- Sys.time()
+  for (.dir in .dirs) {
+    .preproc_dir <- .data2preproc(.dir)
+    .pls_l <- mapply(function(.x1, .x2) c(.x1, list(.x2)), .pls_l, 
+                      preproc_facs_plate(.dir, .preproc_dir, .f_par, .f_utils,
+                                         .plot, .verbose, .write_format, .min_cells, .pdf_dim, .cache_namer, .force),
+                      SIMPLIFY = FALSE)
+    .dt <- format(Sys.time() - .t0)
+    if (.verbose>1) cat('Elapsed time is ', .dt, '\n')
+    .t0 <- Sys.time()
+  }
+  if (.verbose) cat('\nMerging dataframes...\n')
+  .pls <- lapply(.pls_l, function(.var_df) 
+    do.call(rbind, .var_df))
+
+  return( .pls)
+}
+
+preproc_facs_plate <- function(.dir, .out_dir, .f_par, .f_utils, 
+                               .plot, .verbose, .write_format, .min_cells, .pdf_dim, .cache_namer, .force) {
 # preproc_facs_plate loads .fcs files in .dir as a flowSet, apply FSC/SSC gating to select .min_cells
 # subsequently this subset is filtered on channel fl1 to remove background (using a normal + uniform mixture model)
 # optionnaly OD files can be loaded in order to append od values to the statistics
@@ -441,8 +463,11 @@ propagate_index_info <- function(.pls, .info) {
 # is parsed (using , and ; to split) and corresponding wells are filtered out
 # from all .pls dataframes.
 
+  if (!class(.pls)=='list') stop('propagate_index_info: first argument must be a list.')
+  if (!class(.info)=='data.frame') stop('propagate_index_info: second argument must be a dataframe.')
+  
   if (all(c('well', 'discard') %in% names(.info)))
-    stop("propagate_index_info: .info data frame should have column `discard` or column `well`, not both.")
+    stop("propagate_index_info: second argument must be a dataframe with column `discard` or column `well`, not both.")
   
   # CASE: DISCARD WELLS
   if ('discard' %in% names(.info)) {
