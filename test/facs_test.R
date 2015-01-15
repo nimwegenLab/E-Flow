@@ -35,14 +35,8 @@ pl_info <- pl_index %>%
 f_utils <- set_fsc_ssc_gates(pl_index$dir[1], f_par)#, .interactive=TRUE)
 
 # facs preprocessing
-mypls <- list(gates=NULL, preproc=NULL, stats=NULL)
-for (data_dir in pl_index$dir) {
-  preproc_dir <- data2preproc(data_dir)
-  mypls <- mapply(rbind, mypls, 
-                  preproc_facs_plate(data_dir, preproc_dir,
-                                     f_par, f_utils, .verbose=2), #.force=TRUE),
-                  SIMPLIFY = FALSE)
-}
+mypls <- preproc_facs_plates(pl_info$dir, data2preproc, f_par, f_utils, .min_cells=500,
+                             .plot=TRUE, .verbose=2, .force=TRUE)
 mypls <- propagate_index_info(mypls, pl_info)
 
 qplot(fsc, ssc, data=mutate(mypls$gates, fc=interaction(condition, date)), 
@@ -67,14 +61,8 @@ w_info <- w_index %>%
   mutate(well=unlist(.ws))
 
 # facs preprocessing
-mywells <- list(gates=NULL, preproc=NULL, stats=NULL)
-for (data_dir in unique(w_index$dir)) {
-  preproc_dir <- data2preproc(data_dir)
-  mywells <- mapply(rbind, mywells, 
-                  preproc_facs_plate(data_dir, preproc_dir,
-                                     f_par, f_utils, .verbose=2), #.force=TRUE),
-                  SIMPLIFY = FALSE)
-}
+mywells <- preproc_facs_plates(unique(w_index$dir), data2preproc, f_par, f_utils, .min_cells=500,
+                               .plot=TRUE, .verbose=2, .force=TRUE)
 mywells <- propagate_index_info(mywells, w_info)
 
 qplot(fsc, ssc, data=mywells$gates, col=well, alpha=I(.8), group=path, geom='path') +
