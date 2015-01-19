@@ -1,8 +1,8 @@
 ### PARAMETERS
-proj_path <- "~/Documents/Biozentrum/Projects/vngWetLabR/facs/test"
-pl_index_file <- "testIndex_plates.csv" # index file by plate
-w_index_file <- "testIndex_wells.csv"  # index file by well
-scripts_path <- "../facs_toolbox.R"
+proj_path <- "~/Documents/Biozentrum/Projects/vngWetLabR/facs/example"
+pl_index_file <- "exampleIndex_plates.csv" # index file by plate
+w_index_file <- "exampleIndex_wells.csv"  # index file by well
+scripts_path <- "~/Documents/Biozentrum/Projects/vngWetLabR/facs/facs_toolbox.R"
 data2preproc <- function(.d) sub('/data/', '/preproc/', .d) # store cache file in preproc subdir
 # data2preproc <- identity # store cache files with raw data
 
@@ -59,6 +59,9 @@ w_info <- w_index %>%
   # split well column and create one line for each value
   slice(rep(1:dim(w_index)[1], times=sapply(.ws, length))) %>%
   mutate(well=unlist(.ws))
+
+# create gates and log transform (with interactive control) 
+f_utils <- set_fsc_ssc_gates(w_index$dir[1], f_par)#, .interactive=TRUE)
 
 # facs preprocessing
 mywells <- preproc_facs_plates(unique(w_index$dir), data2preproc, f_par, f_utils, .min_cells=500,

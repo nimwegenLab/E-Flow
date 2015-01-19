@@ -179,7 +179,7 @@ preproc_facs_plate <- function(.dir, .out_dir, .f_par, .f_utils,
     source(.fpar_file[1], local=TRUE)
     .f_par <- f_par
     .f_utils <- set_fsc_ssc_gates(.dir, .f_par)
-    if (.verbose) cat("Local FACS parameters loaded...\n")
+#     if (.verbose) cat("Local FACS parameters loaded...\n")
   }
   
   # Prepare output (directory, variables, plot)
@@ -207,17 +207,18 @@ preproc_facs_plate <- function(.dir, .out_dir, .f_par, .f_utils,
   #     .f_od = NA
   #   }
   
+  if (.verbose>1) cat("Reading .fcs files...\n")  
   .fs <- read.flowSet(path=.dir, full.names=TRUE, pattern=.f_par$file.pattern, phenoData=list(Filename="$FIL", Time="$BTIM"))
   .fs <- .fs[, .f_par$channels]
   if (.verbose>1) cat("number of files read: ", length(.fs), "\n\n")  
   
   # Do all the primary gating on the entire flowSet
-  fs.cells  <-  Subset(.fs, .f_utils$not.debris.gate)
-  if (.verbose>1) cat("Debris gated\n\n")
-  fs.cellsT <- .f_utils$ListlogT %on% fs.cells
-  if (.verbose>1) cat("Data Log transformed\n\n")
-  fs.normT <- Subset(fs.cellsT, .f_utils$n2f.gate)
-  if (.verbose>1) cat("Bv Normal filter applied\n\n")
+if (.verbose>1) cat("Gating non debris events...\n")
+fs.cells  <-  Subset(.fs, .f_utils$not.debris.gate)
+if (.verbose>1) cat("Transforming data to log...\n")
+fs.cellsT <- .f_utils$ListlogT %on% fs.cells
+if (.verbose>1) cat("Applying bivariate normal filter...\n\n")
+fs.normT <- Subset(fs.cellsT, .f_utils$n2f.gate)
   
   # Do the secondary gating on each flowFrame (in chronological order)
   if (.verbose>1) cat("Subsetting and filtering files:\n")
@@ -301,8 +302,9 @@ find_densest_area <- function(.x, .y, .prop, n.bins=50) {
 # 1. compute the 2D density of points using the KernSmooth library on a n.bins x n.bins lattice
 # 2. compute the exptal cumulative of the density over the grid
 # 3. find the density value within which .prop of all points are included (here called .level)
+  ext_range <- function(.xs, .factor=2) c(min(.xs)/.factor, max(.xs)*.factor)
   .dens <- KernSmooth::bkde2D(cbind(.x, .y), bandwidth=c(MASS::bandwidth.nrd(.x)/2, MASS::bandwidth.nrd(.y)/2), # need to reduce bandwidth to mimick kde2d
-                              gridsize = c(n.bins, n.bins), range.x=list(range(.x), range(.y)))
+                              gridsize = c(n.bins, n.bins))#, range.x=list(ext_range(.x, 1), ext_range(.y, 1)))
   .dx <- diff(.dens$x1)[1]
   .dy <- diff(.dens$x2)[1]
   .da <- .dx * .dy
