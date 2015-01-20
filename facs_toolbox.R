@@ -18,6 +18,9 @@ suppressPackageStartupMessages( {
   library(RColorBrewer)
 })
 
+# flowViz config
+flowViz.par.set(theme =  trellis.par.get(), reset = TRUE)
+
 # ggplot2 config
 theme_set(theme_bw())
 scale_colour_discrete <- function(...) scale_colour_brewer(..., palette="Set1")
@@ -63,13 +66,17 @@ get_flowset_timestamp <- function(.fs) {
   return(.timestamp)
 }
 
-facs_contour_with_polyg <- function(.ff, .chs, .lims, .polyg=NULL, .highlight_no_polyg=TRUE, .fill=topo.colors(4, alpha=0.1)) {
+facs_contour_with_gate <- function(.ff, .chs, .lims, .gate=NULL, .polygons=NULL,
+                                   .highlight_no_gate=TRUE, .fill="#4C00FF1A") {
 # draw a contour plot given 2 channels .ch of a flowframe, within .lims for both axis
-# if polygon is a 2 column matrix a coordinates, the corrseponding gate is overlaid in red
+# if gate is a 2 column matrix of coordinates, the corresponding gate is overlaid in red
   contour(.ff, y=.chs, xlim=.lims, ylim=.lims, nlevels=8, fill=.fill, col='gray70', lwd=0.05)
-  polygon(.polyg, lwd=.2, border='red', col=rgb(1, 1, 1, .5))
-  if (is.null(.polyg) && .highlight_no_polyg)  # draw a red background if no polygon provided
-    rect(.lims[1]-10, .lims[1]-10, .lims[2]+10, .lims[2]+10, col=rgb(1, 0, 0, .1))
+  for (.i in unique(.polygons$blob))
+    polygon(.polygons[.polygons$blob==.i, 1:2], lwd=.3, border=substr(.fill, 1, 7), col=rgb(.7, .7, .7, .5))
+  polygon(.gate, lwd=.2, border=rgb(1, 0, 0, .8))
+  
+#   if (is.null(.polyg) && .highlight_no_gate)  # draw a red background if no polygon provided
+#     rect(.lims[1]-10, .lims[1]-10, .lims[2]+10, .lims[2]+10, col=rgb(1, 0, 0, .1))
 }
 
 density_with_normal <- function(.xs, .normal, .name, .sub, .lab, .lims=c(0.0,6.0)) {
@@ -116,9 +123,6 @@ set_fsc_ssc_gates <- function(.dir, .f_par, .pattern='A1', .interactive=FALSE) {
   .m <- matrix( rep(c(1.01, .f_par$facs.max), .n_channels), ncol=.n_channels)
   colnames(.m) <- c(colnames(.fs))
   not.debris.gate <- rectangleGate(filterId="NonDebris", .m)
-  ### scale.factor is the factor of stdev; n is number of events used to calculate the bivariate normal
-  n2f.gate <- norm2Filter(x=c(colnames(.fs)[1], colnames(.fs)[2]),
-                           method="covMcd", scale.factor=1, n=20000, filterId="Norm2Filter")
   
   if (.interactive) {
     .fst <- ListlogT %on% .fs[[1]]
@@ -129,7 +133,7 @@ set_fsc_ssc_gates <- function(.dir, .f_par, .pattern='A1', .interactive=FALSE) {
     dev.off()
   }
   
-  return(list(ListlogT=ListlogT, not.debris.gate=not.debris.gate, n2f.gate=n2f.gate))
+  return(list(ListlogT=ListlogT, not.debris.gate=not.debris.gate))
 }
 
 preproc_facs_plates <- function(.dirs, .data2preproc, .f_par, .f_utils, .plot=TRUE,
@@ -140,7 +144,7 @@ preproc_facs_plates <- function(.dirs, .data2preproc, .f_par, .f_utils, .plot=TR
                                .cache_namer = (function(.d) file.path(.d, paste(basename(.d), '_preproc.Rdata', sep=''))),
                                .force=FALSE) {          # flag to force analysing raw fcs files even if a cache file exists
 # NB: dataframes are gathered in a list and concatenated only once in order to reduce computing time.
-  .pls_l <- list(gates=list(), preproc=list(), stats=list())
+  .pls_l <- list(gates=list(), polygons=list(), preproc=list(), stats=list())
   .t0 <- Sys.time()
   for (.dir in .dirs) {
     .preproc_dir <- .data2preproc(.dir)
@@ -154,7 +158,7 @@ preproc_facs_plates <- function(.dirs, .data2preproc, .f_par, .f_utils, .plot=TR
   }
   if (.verbose) cat('\nMerging dataframes...\n')
   .pls <- lapply(.pls_l, function(.var_df) 
-    do.call(rbind, .var_df))
+    do.call(rbind, .var_df) )
 
   return( .pls)
 }
@@ -170,7 +174,7 @@ preproc_facs_plate <- function(.dir, .out_dir, .f_par, .f_utils,
   if (file.exists(.cache_namer(.out_dir)) && !.force) {
     load(.cache_namer(.out_dir)) # load objet .pl
     if (.verbose) cat("Cache loaded from ", basename(.cache_namer(.out_dir)), "\n", sep='')
-    return(.pl)
+    return (.pl)
   }
   
   # if a local FACS params file exists, load it
@@ -185,6 +189,7 @@ preproc_facs_plate <- function(.dir, .out_dir, .f_par, .f_utils,
   # Prepare output (directory, variables, plot)
   dir.create(.out_dir, recursive=TRUE, showWarnings=FALSE)  # here we will store the gated facs data and cache files
   .gates <- data.frame()
+  .polygons <- data.frame()
   .preproc <- data.frame()
   .stats <- data.frame()
   if(.plot) { # open a new pdf for plots (in raw data dir)
@@ -198,8 +203,8 @@ preproc_facs_plate <- function(.dir, .out_dir, .f_par, .f_utils,
   # Load OD file if a pattern is provided
   .f_od = NA
   try({.od_file <- list.files(.dir, pattern=.f_par$od.pattern)
-  .f_od <- read_od_file(file.path(.dir, .od_file), .format='long')
-  if (.verbose>1) cat("OD file read\n\n")}, silent=TRUE)
+       .f_od <- read_od_file(file.path(.dir, .od_file), .format='long')
+       if (.verbose>1) cat("OD file read\n\n")}, silent=TRUE)
   #   if (exists('od.pattern', where=.f_par)) {
   #     .od_file <- list.files(.dir, pattern=.f_par$od.pattern)
   #     .f_od <- read_od_file(file.path(.dir, .od_file), .format='long')
@@ -213,12 +218,10 @@ preproc_facs_plate <- function(.dir, .out_dir, .f_par, .f_utils,
   if (.verbose>1) cat("number of files read: ", length(.fs), "\n\n")  
   
   # Do all the primary gating on the entire flowSet
-if (.verbose>1) cat("Gating non debris events...\n")
-fs.cells  <-  Subset(.fs, .f_utils$not.debris.gate)
-if (.verbose>1) cat("Transforming data to log...\n")
-fs.cellsT <- .f_utils$ListlogT %on% fs.cells
-if (.verbose>1) cat("Applying bivariate normal filter...\n\n")
-fs.normT <- Subset(fs.cellsT, .f_utils$n2f.gate)
+  if (.verbose>1) cat("Gating non debris events...\n")
+  fs.cells  <-  Subset(.fs, .f_utils$not.debris.gate)
+  if (.verbose>1) cat("Transforming data to log...\n")
+  fs.cellsT <- .f_utils$ListlogT %on% fs.cells
   
   # Do the secondary gating on each flowFrame (in chronological order)
   if (.verbose>1) cat("Subsetting and filtering files:\n")
@@ -227,7 +230,7 @@ fs.normT <- Subset(fs.cellsT, .f_utils$n2f.gate)
            'gfp' = which(names(.f_par$channels) == 'fl1'))
   
   for(.file in order(get_flowset_timestamp(.fs)) ) { # process by increasing acquisition time
-    .ff <- fs.normT[[.file]]
+    .ff <- fs.cellsT[[.file]]
     if (.verbose>1) cat(.file, ":", identifier(.ff), "\t", sep="")
     
     .od <- try(.f_od$od[.f_od$well==keyword(.ff, "TUBE NAME")], silent=TRUE) # fetch OD value if od has been loaded
@@ -237,6 +240,7 @@ fs.normT <- Subset(fs.cellsT, .f_utils$n2f.gate)
     .spl <- preproc_facs_sample_secondary(.ff, .out_dir, .ch, .f_par, .od, .min_cells, 
                                           .write_format, .plot, plot.name)
     .gates <- rbind(.gates, .spl$gate)
+    .polygons <- rbind(.polygons, .spl$polygons)
     .preproc <- rbind(.preproc, .spl$preproc)
     .stats <- rbind(.stats, as.data.frame(.spl$stats))
   }
@@ -245,7 +249,7 @@ fs.normT <- Subset(fs.cellsT, .f_utils$n2f.gate)
   # output stats
   write.csv (.stats, file=file.path(.out_dir, "stats.csv"))
   
-  .pl <- list(gates=.gates, preproc=.preproc, stats=.stats)
+  .pl <- list(gates=.gates, polygons=.polygons, preproc=.preproc, stats=.stats)
   save('.pl', file=.cache_namer(.out_dir))
   return(.pl)
 }
@@ -282,18 +286,19 @@ preproc_facs_sample_secondary <- function(.ff, .out_dir, .ch, .f_par, .od=NA, .m
   .ff_stats <- c(.ff_stats, stats_var_summary(ff.g$gfp, gfp_normal$weights, .xname='gfp'))
   
   if (.plot) {
-    facs_contour_with_polyg(.ff, .ch[c('fsc', 'ssc')], .f_par$lims, .polyg=.g$polygon)
+    facs_contour_with_gate(.ff, .ch[c('fsc', 'ssc')], .f_par$lims, .gate=.g$gate, .polygons=.g$polygons)
     
     if (missing(plot.name)) plot.name <- keyword(.g$ff, "ORIGINALGUID")
     plot.label <- sprintf("m=%.2f  sd=%.2f  n=%d", gfp_normal$theta$mu1,  gfp_normal$theta$sigma1, dim(.g$ff)[1])     
     density_with_normal(exprs(.g$ff[, .ch['gfp']]), list(list(mu=gfp_normal$theta$mu1, sigma=gfp_normal$theta$sigma1, col='red')),
-                             plot.name, plot.label, .lab="log10 GFP (AU)")
+                        plot.name, plot.label, .lab="log10 GFP (AU)")
   }
-  .gate <- .g$polygon
-  try(names(.gate) <- c('fsc', 'ssc'), silent=TRUE)
+  .gate <- .g$gate
   if (!is.null(.gate)) .gate <- data.frame(path=.path, well=.well, .gate)
+  .polygons <- .g$polygons
+  if (!is.null(.polygons)) .polygons <- data.frame(path=.path, well=.well, .polygons)
   
-  return(list(gate=.gate, preproc=.ff_preproc, stats=.ff_stats))
+  return(list(gate=.gate, polygons=.polygons, preproc=.ff_preproc, stats=.ff_stats))
 }
 
 find_densest_area <- function(.x, .y, .prop, n.bins=50) {
@@ -302,9 +307,11 @@ find_densest_area <- function(.x, .y, .prop, n.bins=50) {
 # 1. compute the 2D density of points using the KernSmooth library on a n.bins x n.bins lattice
 # 2. compute the exptal cumulative of the density over the grid
 # 3. find the density value within which .prop of all points are included (here called .level)
-  ext_range <- function(.xs, .factor=2) c(min(.xs)/.factor, max(.xs)*.factor)
-  .dens <- KernSmooth::bkde2D(cbind(.x, .y), bandwidth=c(MASS::bandwidth.nrd(.x)/2, MASS::bandwidth.nrd(.y)/2), # need to reduce bandwidth to mimick kde2d
-                              gridsize = c(n.bins, n.bins))#, range.x=list(ext_range(.x, 1), ext_range(.y, 1)))
+  .dens <- KernSmooth::bkde2D(cbind(.x, .y), bandwidth=c(MASS::bandwidth.nrd(.x), MASS::bandwidth.nrd(.y)), # need to reduce bandwidth to mimick kde2d
+                              gridsize = c(n.bins, n.bins))#, range.x=list(range(.x), range(.y)))
+#   ext_range <- function(.xs, .factor=2) c(min(.xs)/.factor, max(.xs)*.factor)
+#   .dens <- KernSmooth::bkde2D(cbind(.x, .y), bandwidth=c(MASS::bandwidth.nrd(.x)/2, MASS::bandwidth.nrd(.y)/2), # need to reduce bandwidth to mimick kde2d
+#                               gridsize = c(n.bins, n.bins), range.x=list(ext_range(.x, 1), ext_range(.y, 1)))
   .dx <- diff(.dens$x1)[1]
   .dy <- diff(.dens$x2)[1]
   .da <- .dx * .dy
@@ -312,44 +319,64 @@ find_densest_area <- function(.x, .y, .prop, n.bins=50) {
   .tot.dens <- sum(.dens$fhat) * .da
   .ord <- order(.dens$fhat, decreasing=TRUE)
   .ecdf <- cumsum(.dens$fhat[.ord])*.da / .tot.dens # sanity check: max must ≈ 1
-  .level.idx <- max( which(.ecdf < .prop))
+  .level.idx <- max(c( which(.ecdf < .prop), 1) )
   .level <- .dens$fhat[.ord][.level.idx]
   .contours <- contourLines(.dens$x1, .dens$x2, .dens$fhat, levels=.level)
-  .polyg <- matrix(c(.contours[[1]]$x, .contours[[1]]$y), ncol=2)
-  return(.polyg)
-  
-  # plot(.ecdf)
-  
-  # .keep <- .ord[ which(.dens$fhat[.ord]>.level) ]    
-  # .dens2 <- .dens
-  # .dens2$fhat[.keep] <- max(.dens2$fhat)
-  # image(.dens2$x1, .dens2$x2, .dens2$fhat)
-  # lines(.polyg[[1]]$x, .polyg[[1]]$y)
-  # points(.polyg[[1]]$x, .polyg[[1]]$y)
-  
-  # # find the convex hull of the polygon
-  # .keep.x <- .keep %% n.bins
-  # .keep.y <- floor(.keep/n.bins) + 1
-  # .polyg <- chull(cells.dens$x1[.keep.x], cells.dens$x2[.keep.y])
-  # points(cells.dens$x1[.keep.x][.polyg], cells.dens$x2[.keep.y][.polyg])
+  .polygs <- do.call(rbind, 
+                    lapply(seq_along(.contours), function(.idx) 
+                      matrix(c(.contours[[.idx]]$x, .contours[[.idx]]$y, 
+                               rep(.idx, length(.contours[[.idx]]$x) )), ncol=3) ))
+  return(.polygs)
 }
 
-gate_fsc_ssc <- function(.ff, .fsc_ch, .ssc_ch, .min_cells=5000, .write_format='tab') {
-# Apply a gate selecting .min_cells in the densest area of the (.fsc, .ssc) space.  
+gate_fsc_ssc <- function(.ff, .fsc_ch, .ssc_ch, .min_cells=5000, .write_format='tab', .compute_densest=TRUE) {
+# gate_fsc_ssc applies a gate selecting .min_cells in the densest area of the (.fsc, .ssc) 
+# space, using a bivariate normal interpolation of the data (norm2Filter). 
+# scale.factor sets the gate area (in stdev-like units); more precisely,
+# scale.factor is the maximal Mahalanobis distance to be included in the gate
+# (http://en.wikipedia.org/wiki/Mahalanobis_distance#Normal_distributions). In
+# order to include a fraction p of the density in the gate, d must follow
+# d^2 = -2 ln(1-p).
+# n is number of events used to calculate the bivariate normal.
   .n_cells <- dim(.ff)[1]
-  
-  # Gate population of cells with similar fsc and ssc values (called .ff.S)
+
   if(.n_cells > .min_cells) {
-    .polyg <- find_densest_area(exprs(.ff[, .fsc_ch]), exprs(.ff[, .ssc_ch]), .prop=.min_cells / .n_cells)
-    colnames(.polyg) <- c(colnames(.ff)[.fsc_ch], colnames(.ff)[.ssc_ch]) # required for gating
-    poly.gate <- polygonGate(filterId="similar.cells", .gate=.polyg)
-    .ff_s <- Subset(.ff, poly.gate)
-    colnames(.polyg) <- c('fsc', 'ssc') # convenient for export
+    .prop <- .min_cells / .n_cells  
+    # compute bivariate normal gate
+    .dist <- sqrt(-2*log(1-.prop))
+    .n2f <- norm2Filter(x=c(colnames(.ff)[.fsc_ch], colnames(.ff)[.ssc_ch]),
+                            method="covMcd", scale.factor=.dist, n=20000, filterId="Norm2Filter")
+    .n2f_res <- flowCore::filter(.ff, .n2f)
+    # convert gate to polygon (for export)
+    .n2f_vals <- .n2f_res@filterDetails$Norm2Filter
+    .gate <- ellipse2polygon(.n2f_vals$center, .n2f_vals$cov, .n2f_vals$radius)
+    colnames(.gate) <- c('fsc', 'ssc')
+    # subset flowframe
+    .ff_s <- Subset(.ff, .n2f_res)
+    # compute density contour (for visual inspection)
+    if (!.compute_densest) {
+      .polygs <- NULL
+    } else {
+      # find contour on all dataset
+      .polygs <- find_densest_area(exprs(.ff[, .fsc_ch]), exprs(.ff[, .ssc_ch]), .prop=.prop)
+      colnames(.polygs) <- c('fsc', 'ssc', 'blob')
+      .polygs <- as.data.frame(.polygs)
+    }
   }  else { 
     .ff_s <- .ff
-    .polyg <- NULL # matrix(c(contours[[1]]$x, contours[[1]]$y), ncol=2)
-  }  
-  return(list(polygon=.polyg, ff=.ff_s))
+    .gate <- NULL
+    .polygs <- NULL
+  }
+  return(list(gate=.gate, ff=.ff_s, polygons=.polygs))
+}
+  
+ellipse2polygon <- function(.center, .cov, .radius=1, .n=50) {
+  # from http://stats.stackexchange.com/a/9900
+  .RR     <- chol(.cov)                                     # Cholesky decomposition
+  .angles <- seq(0, 2*pi, length.out=.n)                    # angles for ellipse
+  .ell    <- .radius * cbind(cos(.angles), sin(.angles)) %*% .RR  # ellipse scaled with factor 1
+  .ellCtr <- sweep(.ell, 2, .center, "+")                   # center ellipse to the data centroid
+  return(.ellCtr)
 }
 
 write.FCS.tab <- function (.x, .filename, .channel, .digits=NULL) {
