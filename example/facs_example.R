@@ -35,7 +35,7 @@ pl_info <- pl_index %>%
 f_utils <- set_fsc_ssc_gates(pl_index$dir[1], f_par)#, .interactive=TRUE)
 
 # facs preprocessing
-mypls <- preproc_facs_plates(pl_info$dir, data2preproc, f_par, f_utils, .min_cells=500,
+mypls <- preproc_facs_plates(pl_info$dir, data2preproc, f_par, f_utils, .min_cells=5000,
                              .plot=TRUE, .verbose=2, .force=TRUE)
 mypls <- propagate_index_info(mypls, pl_info)
 
@@ -45,11 +45,9 @@ qplot(fsc, ssc, data=mutate(mypls$gates, fc=interaction(condition, date)),
 qplot(fsc, ssc, data=mypls$gates %>% split_well_col, 
       col=interaction(condition, date), group=interaction(condition, date, plate), geom='path', facets=row~col)
 
-ggplot(data=mutate(mypls$gates, fc=interaction(condition, date)), aes(fsc, ssc)) +
-  geom_path(aes(col='gates', group=interaction(fc, path, well)), alpha=.8) +
-  geom_path(aes(col='polygons', group=interaction(fc, path, well, blob)), alpha=.8, data=mutate(mypls$polygons, fc=interaction(condition, date))) +
-  facet_wrap(~fc) +
-  labs(col='dataset')
+mypls$preproc %>%
+  group_by(condition, date, plate, well) %>%
+  summarise(n_cells = n())
 
 
 ### Load data defined per wells

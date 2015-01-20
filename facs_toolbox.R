@@ -66,17 +66,15 @@ get_flowset_timestamp <- function(.fs) {
   return(.timestamp)
 }
 
-facs_contour_with_gate <- function(.ff, .chs, .lims, .gate=NULL, .polygons=NULL,
+facs_contour_with_gate <- function(.ff, .chs, .lims, .gate=NULL,
                                    .highlight_no_gate=TRUE, .fill="#4C00FF1A") {
 # draw a contour plot given 2 channels .ch of a flowframe, within .lims for both axis
 # if gate is a 2 column matrix of coordinates, the corresponding gate is overlaid in red
   contour(.ff, y=.chs, xlim=.lims, ylim=.lims, nlevels=8, fill=.fill, col='gray70', lwd=0.05)
-  for (.i in unique(.polygons$blob))
-    polygon(.polygons[.polygons$blob==.i, 1:2], lwd=.3, border=substr(.fill, 1, 7), col=rgb(.7, .7, .7, .5))
   polygon(.gate, lwd=.2, border=rgb(1, 0, 0, .8))
   
-#   if (is.null(.polyg) && .highlight_no_gate)  # draw a red background if no polygon provided
-#     rect(.lims[1]-10, .lims[1]-10, .lims[2]+10, .lims[2]+10, col=rgb(1, 0, 0, .1))
+  if (is.null(.gate) && .highlight_no_gate)  # draw a red background if no polygon provided
+    rect(.lims[1]-10, .lims[1]-10, .lims[2]+10, .lims[2]+10, col=rgb(1, 0, 0, .1))
 }
 
 density_with_normal <- function(.xs, .normal, .name, .sub, .lab, .lims=c(0.0,6.0)) {
@@ -126,7 +124,7 @@ set_fsc_ssc_gates <- function(.dir, .f_par, .pattern='A1', .interactive=FALSE) {
   
   if (.interactive) {
     .fst <- ListlogT %on% .fs[[1]]
-    facs_contour_with_polyg(.fst, 1:2, .f_par$lims, .highlight_no_polyg=FALSE)
+    facs_contour_with_gate(.fst, 1:2, .f_par$lims, .highlight_no_gate=FALSE)
     cat("\nIs this plot okay (y or n)?\n")
     y <- scan(n=1, what=character())
     if(y != "y") { stop("\nincorrect parameter values or \n you didn't type 'y'\n") }
@@ -144,7 +142,7 @@ preproc_facs_plates <- function(.dirs, .data2preproc, .f_par, .f_utils, .plot=TR
                                .cache_namer = (function(.d) file.path(.d, paste(basename(.d), '_preproc.Rdata', sep=''))),
                                .force=FALSE) {          # flag to force analysing raw fcs files even if a cache file exists
 # NB: dataframes are gathered in a list and concatenated only once in order to reduce computing time.
-  .pls_l <- list(gates=list(), polygons=list(), preproc=list(), stats=list())
+  .pls_l <- list(gates=list(), preproc=list(), stats=list())
   .t0 <- Sys.time()
   for (.dir in .dirs) {
     .preproc_dir <- .data2preproc(.dir)
@@ -189,7 +187,6 @@ preproc_facs_plate <- function(.dir, .out_dir, .f_par, .f_utils,
   # Prepare output (directory, variables, plot)
   dir.create(.out_dir, recursive=TRUE, showWarnings=FALSE)  # here we will store the gated facs data and cache files
   .gates <- data.frame()
-  .polygons <- data.frame()
   .preproc <- data.frame()
   .stats <- data.frame()
   if(.plot) { # open a new pdf for plots (in raw data dir)
@@ -240,7 +237,6 @@ preproc_facs_plate <- function(.dir, .out_dir, .f_par, .f_utils,
     .spl <- preproc_facs_sample_secondary(.ff, .out_dir, .ch, .f_par, .od, .min_cells, 
                                           .write_format, .plot, plot.name)
     .gates <- rbind(.gates, .spl$gate)
-    .polygons <- rbind(.polygons, .spl$polygons)
     .preproc <- rbind(.preproc, .spl$preproc)
     .stats <- rbind(.stats, as.data.frame(.spl$stats))
   }
@@ -249,7 +245,7 @@ preproc_facs_plate <- function(.dir, .out_dir, .f_par, .f_utils,
   # output stats
   write.csv (.stats, file=file.path(.out_dir, "stats.csv"))
   
-  .pl <- list(gates=.gates, polygons=.polygons, preproc=.preproc, stats=.stats)
+  .pl <- list(gates=.gates, preproc=.preproc, stats=.stats)
   save('.pl', file=.cache_namer(.out_dir))
   return(.pl)
 }
@@ -286,7 +282,7 @@ preproc_facs_sample_secondary <- function(.ff, .out_dir, .ch, .f_par, .od=NA, .m
   .ff_stats <- c(.ff_stats, stats_var_summary(ff.g$gfp, gfp_normal$weights, .xname='gfp'))
   
   if (.plot) {
-    facs_contour_with_gate(.ff, .ch[c('fsc', 'ssc')], .f_par$lims, .gate=.g$gate, .polygons=.g$polygons)
+    facs_contour_with_gate(.ff, .ch[c('fsc', 'ssc')], .f_par$lims, .gate=.g$gate)
     
     if (missing(plot.name)) plot.name <- keyword(.g$ff, "ORIGINALGUID")
     plot.label <- sprintf("m=%.2f  sd=%.2f  n=%d", gfp_normal$theta$mu1,  gfp_normal$theta$sigma1, dim(.g$ff)[1])     
@@ -295,41 +291,11 @@ preproc_facs_sample_secondary <- function(.ff, .out_dir, .ch, .f_par, .od=NA, .m
   }
   .gate <- .g$gate
   if (!is.null(.gate)) .gate <- data.frame(path=.path, well=.well, .gate)
-  .polygons <- .g$polygons
-  if (!is.null(.polygons)) .polygons <- data.frame(path=.path, well=.well, .polygons)
   
-  return(list(gate=.gate, polygons=.polygons, preproc=.ff_preproc, stats=.ff_stats))
+  return(list(gate=.gate, preproc=.ff_preproc, stats=.ff_stats))
 }
 
-find_densest_area <- function(.x, .y, .prop, n.bins=50) {
-# given a set of points (.x, .y), find_densest_area returns the coordinates of the polygon that 
-# includes .prop of all points in the densest region of the (.x, .y) space:
-# 1. compute the 2D density of points using the KernSmooth library on a n.bins x n.bins lattice
-# 2. compute the exptal cumulative of the density over the grid
-# 3. find the density value within which .prop of all points are included (here called .level)
-  .dens <- KernSmooth::bkde2D(cbind(.x, .y), bandwidth=c(MASS::bandwidth.nrd(.x), MASS::bandwidth.nrd(.y)), # need to reduce bandwidth to mimick kde2d
-                              gridsize = c(n.bins, n.bins))#, range.x=list(range(.x), range(.y)))
-#   ext_range <- function(.xs, .factor=2) c(min(.xs)/.factor, max(.xs)*.factor)
-#   .dens <- KernSmooth::bkde2D(cbind(.x, .y), bandwidth=c(MASS::bandwidth.nrd(.x)/2, MASS::bandwidth.nrd(.y)/2), # need to reduce bandwidth to mimick kde2d
-#                               gridsize = c(n.bins, n.bins), range.x=list(ext_range(.x, 1), ext_range(.y, 1)))
-  .dx <- diff(.dens$x1)[1]
-  .dy <- diff(.dens$x2)[1]
-  .da <- .dx * .dy
-  
-  .tot.dens <- sum(.dens$fhat) * .da
-  .ord <- order(.dens$fhat, decreasing=TRUE)
-  .ecdf <- cumsum(.dens$fhat[.ord])*.da / .tot.dens # sanity check: max must ≈ 1
-  .level.idx <- max(c( which(.ecdf < .prop), 1) )
-  .level <- .dens$fhat[.ord][.level.idx]
-  .contours <- contourLines(.dens$x1, .dens$x2, .dens$fhat, levels=.level)
-  .polygs <- do.call(rbind, 
-                    lapply(seq_along(.contours), function(.idx) 
-                      matrix(c(.contours[[.idx]]$x, .contours[[.idx]]$y, 
-                               rep(.idx, length(.contours[[.idx]]$x) )), ncol=3) ))
-  return(.polygs)
-}
-
-gate_fsc_ssc <- function(.ff, .fsc_ch, .ssc_ch, .min_cells=5000, .write_format='tab', .compute_densest=TRUE) {
+gate_fsc_ssc <- function(.ff, .fsc_ch, .ssc_ch, .min_cells=5000, .write_format='tab') {
 # gate_fsc_ssc applies a gate selecting .min_cells in the densest area of the (.fsc, .ssc) 
 # space, using a bivariate normal interpolation of the data (norm2Filter). 
 # scale.factor sets the gate area (in stdev-like units); more precisely,
@@ -353,25 +319,12 @@ gate_fsc_ssc <- function(.ff, .fsc_ch, .ssc_ch, .min_cells=5000, .write_format='
     colnames(.gate) <- c('fsc', 'ssc')
     # subset flowframe
     .ff_s <- Subset(.ff, .n2f_res)
-    # compute density contour (for visual inspection)
-    if (!.compute_densest) {
-      .polygs <- NULL
-    } else {
-      # find contour on a gaussian filtered subset (Olin's style)
-      .n2f <- norm2Filter(x=c(colnames(.ff)[.fsc_ch], colnames(.ff)[.ssc_ch]),
-                          method="covMcd", scale.factor=1, n=20000, filterId="Norm2Filter")
-      .ff_s <- Subset(.ff, .n2f_res)
-      .prop_s <- .min_cells / dim(.ff_s)[1]
-      .polygs <- find_densest_area(exprs(.ff_s[, .fsc_ch]), exprs(.ff_s[, .ssc_ch]), .prop=.prop_s)
-      colnames(.polygs) <- c('fsc', 'ssc', 'blob')
-      .polygs <- as.data.frame(.polygs)
-    }
-  }  else { 
+  } else { 
     .ff_s <- .ff
     .gate <- NULL
     .polygs <- NULL
   }
-  return(list(gate=.gate, ff=.ff_s, polygons=.polygs))
+  return(list(gate=.gate, ff=.ff_s))
 }
   
 ellipse2polygon <- function(.center, .cov, .radius=1, .n=50) {
