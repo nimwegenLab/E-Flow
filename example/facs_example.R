@@ -31,6 +31,8 @@ pl_info <- pl_index %>%
   select(-comment) %>%
   extract_('dir', c('condition', 'date'), '.*/([^/]+)/([0-9]{8})/[^/]+$', remove=FALSE)
 
+delete_preproc_files(pl_index$dir)#, .silent=TRUE) 
+
 # create gates and log transform (with interactive control) 
 f_utils <- set_fsc_ssc_gates(pl_index$dir[1], f_par)#, .interactive=TRUE)
 

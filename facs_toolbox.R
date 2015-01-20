@@ -134,6 +134,21 @@ set_fsc_ssc_gates <- function(.dir, .f_par, .pattern='A1', .interactive=FALSE) {
   return(list(ListlogT=ListlogT, not.debris.gate=not.debris.gate))
 }
 
+delete_preproc_files <- function(.dirs, .silent=FALSE, 
+                                 .cache_namer=(function(.d) file.path(.d, paste(basename(.d), '_preproc.Rdata', sep=''))) ) {
+# delete preproc files
+  if (.silent) {
+    ops <- options(warn = -1)
+    on.exit(options(ops))
+  }    
+  for (.dir in .dirs) {
+    .out_dir <- data2preproc(.dir)
+    file.remove(.cache_namer(.out_dir),
+                file.path(.out_dir, "stats.csv"),
+                file.path(.dir, paste(basename(.dir), 'pdf', sep='.')))
+  }
+}
+
 preproc_facs_plates <- function(.dirs, .data2preproc, .f_par, .f_utils, .plot=TRUE,
                                .verbose=0,              # console output (0: silent, 1: minimalist, 2: detailled)
                                .write_format=NULL,      # formats in which to write subseted data to .out_dir (vector of strings in 'fcs', 'tab' or both)
