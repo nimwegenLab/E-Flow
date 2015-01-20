@@ -357,8 +357,12 @@ gate_fsc_ssc <- function(.ff, .fsc_ch, .ssc_ch, .min_cells=5000, .write_format='
     if (!.compute_densest) {
       .polygs <- NULL
     } else {
-      # find contour on all dataset
-      .polygs <- find_densest_area(exprs(.ff[, .fsc_ch]), exprs(.ff[, .ssc_ch]), .prop=.prop)
+      # find contour on a gaussian filtered subset (Olin's style)
+      .n2f <- norm2Filter(x=c(colnames(.ff)[.fsc_ch], colnames(.ff)[.ssc_ch]),
+                          method="covMcd", scale.factor=1, n=20000, filterId="Norm2Filter")
+      .ff_s <- Subset(.ff, .n2f_res)
+      .prop_s <- .min_cells / dim(.ff_s)[1]
+      .polygs <- find_densest_area(exprs(.ff_s[, .fsc_ch]), exprs(.ff_s[, .ssc_ch]), .prop=.prop_s)
       colnames(.polygs) <- c('fsc', 'ssc', 'blob')
       .polygs <- as.data.frame(.polygs)
     }
