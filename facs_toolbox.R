@@ -70,7 +70,11 @@ facs_contour_with_gate <- function(.ff, .chs, .lims, .gate=NULL,
                                    .highlight_no_gate=TRUE, .fill="#4C00FF1A") {
 # draw a contour plot given 2 channels .ch of a flowframe, within .lims for both axis
 # if gate is a 2 column matrix of coordinates, the corresponding gate is overlaid in red
-  contour(.ff, y=.chs, xlim=.lims, ylim=.lims, nlevels=8, fill=.fill, col='gray70', lwd=0.05)
+  ops <- options(warn = 1) # print warnings as they occur
+  on.exit(options(ops))
+  
+  suppressWarnings( contour(.ff, y=.chs, xlim=.lims, ylim=.lims, fill=.fill, col='gray70', lwd=0.05,
+                            nlevels=8, grid.size=c(100,100)) )
   polygon(.gate, lwd=.2, border=rgb(1, 0, 0, .8))
   
   if (is.null(.gate) && .highlight_no_gate)  # draw a red background if no polygon provided
@@ -310,6 +314,54 @@ preproc_facs_sample_secondary <- function(.ff, .out_dir, .ch, .f_par, .od=NA, .m
   return(list(gate=.gate, preproc=.ff_preproc, stats=.ff_stats))
 }
 
+find_densest_area <- function(.xy, .prop, n.bins=300) {
+# given a set of points (.x, .y), find_densest_area returns the coordinates of the polygon that 
+# includes .prop of all points in the densest region of the (.x, .y) space:
+# 1. compute the 2D density of points using the KernSmooth library on a n.bins x n.bins lattice
+# 2. compute the exptal cumulative of the density over the grid
+# 3. find the density value within which .prop of all points are included (here called .level)
+  # from flowViz::contour : set range and bandwidth to estimate kernel density
+  bw <- diff(apply(.xy, 2, quantile, probs = c(0.05, 0.95), na.rm = TRUE))/25
+  xr <- range(.xy[, 1], na.rm = TRUE)
+  yr <- range(.xy[, 2], na.rm = TRUE)
+  range <- list(xr + c(-1, 1) * bw[1] * 2.5, yr + c(-1, 1) * bw[2] * 2.5)
+  .dens <- KernSmooth::bkde2D(.xy, bw, c(n.bins, n.bins), range.x = range)
+  # contour(.dens$x1, .dens$x2, .dens$fhat, nlevels = 8, xlim=3:4, ylim=3:4)
+    
+  .dx <- diff(.dens$x1)[1]
+  .dy <- diff(.dens$x2)[1]
+  .da <- .dx * .dy
+  
+  .tot.dens <- sum(.dens$fhat) * .da
+  .ord <- order(.dens$fhat, decreasing=TRUE)
+  .ecdf <- cumsum(.dens$fhat[.ord])*.da / .tot.dens # sanity check: max must ≈ 1
+  .level.idx <- max( which(.ecdf < .prop))
+  .level <- .dens$fhat[.ord][.level.idx]
+  .contours <- contourLines(.dens$x1, .dens$x2, .dens$fhat, levels=.level)
+  # contour(.dens$x1, .dens$x2, .dens$fhat, levels=.level)
+  .n_points <- lapply(.contours, function(.c) length(.c$x))
+  .idx <- which.max(.n_points)
+  if (length(.contours) > 1)
+    warning('contour with multiple regions; gate created from the largest one.')
+  .polyg <- matrix(c(.contours[[.idx]]$x, .contours[[.idx]]$y), ncol=2)
+  return(.polyg)
+  
+  # plot(.ecdf)
+  
+  # .keep <- .ord[ which(.dens$fhat[.ord]>.level) ]    
+  # .dens2 <- .dens
+  # .dens2$fhat[.keep] <- max(.dens2$fhat)
+  # image(.dens2$x1, .dens2$x2, .dens2$fhat)
+  # lines(.polyg[[1]]$x, .polyg[[1]]$y)
+  # points(.polyg[[1]]$x, .polyg[[1]]$y)
+  
+  # # find the convex hull of the polygon
+  # .keep.x <- .keep %% n.bins
+  # .keep.y <- floor(.keep/n.bins) + 1
+  # .polyg <- chull(cells.dens$x1[.keep.x], cells.dens$x2[.keep.y])
+  # points(cells.dens$x1[.keep.x][.polyg], cells.dens$x2[.keep.y][.polyg])
+}
+
 gate_fsc_ssc <- function(.ff, .fsc_ch, .ssc_ch, .min_cells=5000, .write_format='tab') {
 # gate_fsc_ssc applies a gate selecting .min_cells in the densest area of the (.fsc, .ssc) 
 # space, using a bivariate normal interpolation of the data (norm2Filter). 
@@ -322,33 +374,20 @@ gate_fsc_ssc <- function(.ff, .fsc_ch, .ssc_ch, .min_cells=5000, .write_format='
   .n_cells <- dim(.ff)[1]
 
   if(.n_cells > .min_cells) {
-    .prop <- .min_cells / .n_cells  
-    # compute bivariate normal gate
-    .dist <- sqrt(-2*log(1-.prop))
-    .n2f <- norm2Filter(x=c(colnames(.ff)[.fsc_ch], colnames(.ff)[.ssc_ch]),
-                            method="covMcd", scale.factor=.dist, n=20000, filterId="Norm2Filter")
-    .n2f_res <- flowCore::filter(.ff, .n2f)
-    # convert gate to polygon (for export)
-    .n2f_vals <- .n2f_res@filterDetails$Norm2Filter
-    .gate <- ellipse2polygon(.n2f_vals$center, .n2f_vals$cov, .n2f_vals$radius)
-    colnames(.gate) <- c('fsc', 'ssc')
-    # subset flowframe
-    .ff_s <- Subset(.ff, .n2f_res)
-  } else { 
+    .polyg <- find_densest_area(exprs(.ff[, c(.fsc_ch, .ssc_ch)]), .prop=.min_cells / .n_cells)
+    colnames(.polyg) <- c(colnames(.ff)[.fsc_ch], colnames(.ff)[.ssc_ch]) # required for gating
+    poly.gate <- polygonGate(filterId="similar.cells", .gate=.polyg)
+    .ff_s <- Subset(.ff, poly.gate)
+    colnames(.polyg) <- c('fsc', 'ssc') # convenient for export
+    if (dim(.ff_s)[1] < .8*.min_cells) { # unsuccessful gating
+      .ff_s <- .ff
+      .polyg <- NULL
+    }
+  } else {
     .ff_s <- .ff
-    .gate <- NULL
-    .polygs <- NULL
-  }
-  return(list(gate=.gate, ff=.ff_s))
-}
-  
-ellipse2polygon <- function(.center, .cov, .radius=1, .n=50) {
-  # from http://stats.stackexchange.com/a/9900
-  .RR     <- chol(.cov)                                     # Cholesky decomposition
-  .angles <- seq(0, 2*pi, length.out=.n)                    # angles for ellipse
-  .ell    <- .radius * cbind(cos(.angles), sin(.angles)) %*% .RR  # ellipse scaled with factor 1
-  .ellCtr <- sweep(.ell, 2, .center, "+")                   # center ellipse to the data centroid
-  return(.ellCtr)
+    .polyg <- NULL
+  }  
+  return(list(gate=.polyg, ff=.ff_s))
 }
 
 write.FCS.tab <- function (.x, .filename, .channel, .digits=NULL) {
