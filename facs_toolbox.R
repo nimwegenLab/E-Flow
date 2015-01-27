@@ -540,20 +540,17 @@ propagate_index_info <- function(.pls, .info) {
     })
 }
 
-read_combine_gene_name_file <- function(file, .join){
-# To read into the file downloaded directly from Uri Alon's webpage and
-# converted into csv(the original one is in xlsx format) that contains all the
-# information about the plate. The file is the path to the file that in my case
-# is located in the facs_toolbox and the .join variable refers to to which
-# dataframe of the final list you want to add the information about the genes
-# name.
-  alon_pwg <- read.csv(file) %>%
-    select (Plate_Number, Well, Gene_Name) %>%
-    rename(plate_upper=Plate_Number, well=Well, gene=Gene_Name)   
-  
-  plate <- data.frame(plate = tolower(alon_pwg$plate_upper))
-  
-  alon_pwg <- cbind(plate, alon_pwg)
-  alon_pwg$plate_upper <- NULL
-  left_join(.join, alon_pwg, by = c("plate", "well"))
+read_combine_gene_name_file <- function(file, .df_join){
+# reads the csv file (file) downloaded from Alon's webpage with the library info and joins
+# the promoters name to a dataframe (.df_join) with a 'plate' and 'well' column
+        alon_pwg <- read.csv(file) %>%
+                select (Plate_Number, Well, Gene_Name) %>%
+                rename(plate=Plate_Number, well=Well, gene=Gene_Name)   
+        
+        df_plate <- data.frame(plate_up = toupper(.df_join$plate))
+        
+        .df_join <- cbind(.df_join, df_plate)
+        .df_join$plate <- NULL
+        .df_join <- rename(.df_join, plate=plate_up)
+        left_join(.df_join, alon_pwg, by = c("plate", "well"))
 }
