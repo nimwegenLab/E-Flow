@@ -18,6 +18,9 @@ suppressPackageStartupMessages( {
   library(RColorBrewer)
 })
 
+# flowViz config
+flowViz.par.set(theme =  trellis.par.get(), reset = TRUE)
+
 # ggplot2 config
 theme_set(theme_bw())
 scale_colour_discrete <- function(...) scale_colour_brewer(..., palette="Set1")
@@ -63,12 +66,18 @@ get_flowset_timestamp <- function(.fs) {
   return(.timestamp)
 }
 
-facs_contour_with_polyg <- function(.ff, .chs, .lims, .polyg=NULL, .highlight_no_polyg=TRUE, .fill=topo.colors(4, alpha=0.1)) {
+facs_contour_with_gate <- function(.ff, .chs, .lims, .gate=NULL,
+                                   .highlight_no_gate=TRUE, .fill="#4C00FF1A") {
 # draw a contour plot given 2 channels .ch of a flowframe, within .lims for both axis
-# if polygon is a 2 column matrix a coordinates, the corrseponding gate is overlaid in red
-  contour(.ff, y=.chs, xlim=.lims, ylim=.lims, nlevels=8, fill=.fill, col='gray70', lwd=0.05)
-  polygon(.polyg, lwd=.2, border='red', col=rgb(1, 1, 1, .5))
-  if (is.null(.polyg) && .highlight_no_polyg)  # draw a red background if no polygon provided
+# if gate is a 2 column matrix of coordinates, the corresponding gate is overlaid in red
+  ops <- options(warn = 1) # print warnings as they occur
+  on.exit(options(ops))
+  
+  suppressWarnings( contour(.ff, y=.chs, xlim=.lims, ylim=.lims, fill=.fill, col='gray70', lwd=0.05,
+                            nlevels=8, grid.size=c(100,100)) )
+  polygon(.gate, lwd=.2, border=rgb(1, 0, 0, .8))
+  
+  if (is.null(.gate) && .highlight_no_gate)  # draw a red background if no polygon provided
     rect(.lims[1]-10, .lims[1]-10, .lims[2]+10, .lims[2]+10, col=rgb(1, 0, 0, .1))
 }
 
@@ -85,6 +94,14 @@ density_with_normal <- function(.xs, .normal, .name, .sub, .lab, .lims=c(0.0,6.0
 set_fsc_ssc_gates <- function(.dir, .f_par, .pattern='A1', .interactive=FALSE) { 
 # set_fsc_ssc_gates reads in a single flowFrame in order to create the gates and define log transform.
 # gates can be controlled visually with .interactive=TRUE
+  # if a local FACS params file exists, load it
+  .fpar_file <- list.files(.dir, pattern=paste(basename(.dir), '_fpar.[rR]', sep=''), full.names=TRUE)
+  if (length(.fpar_file) > 0) {
+    source(.fpar_file[1], local=TRUE)
+    .f_par <- f_par
+    cat("Local FACS parameters loaded...\n")
+  }
+  
   .fs <- read.flowSet(path=.dir, full.names=TRUE, pattern=.pattern, phenoData = list(Filename = "$FIL"))
   if (.interactive) cat("All colnames:", colnames(.fs), sep="\n")
   .fs <- .fs[, .f_par$channels]
@@ -108,29 +125,63 @@ set_fsc_ssc_gates <- function(.dir, .f_par, .pattern='A1', .interactive=FALSE) {
   .m <- matrix( rep(c(1.01, .f_par$facs.max), .n_channels), ncol=.n_channels)
   colnames(.m) <- c(colnames(.fs))
   not.debris.gate <- rectangleGate(filterId="NonDebris", .m)
-  ### scale.factor is the factor of stdev; n is number of events used to calculate the bivariate normal
-  n2f.gate <- norm2Filter(x=c(colnames(.fs)[1], colnames(.fs)[2]),
-                           method="covMcd", scale.factor=1, n=20000, filterId="Norm2Filter")
   
   if (.interactive) {
     .fst <- ListlogT %on% .fs[[1]]
-    facs_contour_with_polyg(.fst, 1:2, .f_par$lims, .highlight_no_polyg=FALSE)
+    facs_contour_with_gate(.fst, 1:2, .f_par$lims, .highlight_no_gate=FALSE)
     cat("\nIs this plot okay (y or n)?\n")
     y <- scan(n=1, what=character())
     if(y != "y") { stop("\nincorrect parameter values or \n you didn't type 'y'\n") }
     dev.off()
   }
   
-  return(list(ListlogT=ListlogT, not.debris.gate=not.debris.gate, n2f.gate=n2f.gate))
+  return(list(ListlogT=ListlogT, not.debris.gate=not.debris.gate))
 }
 
-preproc_facs_plate <- function(.dir, .out_dir, .f_par, .f_utils, .plot=TRUE, 
+delete_preproc_files <- function(.dirs, .silent=FALSE, 
+                                 .cache_namer=(function(.d) file.path(.d, paste(basename(.d), '_preproc.Rdata', sep=''))) ) {
+# delete preproc files
+  if (.silent) {
+    ops <- options(warn = -1)
+    on.exit(options(ops))
+  }    
+  for (.dir in .dirs) {
+    .out_dir <- data2preproc(.dir)
+    file.remove(.cache_namer(.out_dir),
+                file.path(.out_dir, "stats.csv"),
+                file.path(.dir, paste(basename(.dir), 'pdf', sep='.')))
+  }
+}
+
+preproc_facs_plates <- function(.dirs, .data2preproc, .f_par, .f_utils, .plot=TRUE,
                                .verbose=0,              # console output (0: silent, 1: minimalist, 2: detailled)
                                .write_format=NULL,      # formats in which to write subseted data to .out_dir (vector of strings in 'fcs', 'tab' or both)
                                .min_cells=5000,         # fraction of data to remove beofre calculating trimmed stats
                                .pdf_dim=c(2, 2, 6, 8), 	# width, height, rows, columns
                                .cache_namer = (function(.d) file.path(.d, paste(basename(.d), '_preproc.Rdata', sep=''))),
                                .force=FALSE) {          # flag to force analysing raw fcs files even if a cache file exists
+# NB: dataframes are gathered in a list and concatenated only once in order to reduce computing time.
+  .pls_l <- list(gates=list(), preproc=list(), stats=list())
+  .t0 <- Sys.time()
+  for (.dir in .dirs) {
+    .preproc_dir <- .data2preproc(.dir)
+    .pls_l <- mapply(function(.x1, .x2) c(.x1, list(.x2)), .pls_l, 
+                      preproc_facs_plate(.dir, .preproc_dir, .f_par, .f_utils,
+                                         .plot, .verbose, .write_format, .min_cells, .pdf_dim, .cache_namer, .force),
+                      SIMPLIFY = FALSE)
+    .dt <- format(Sys.time() - .t0)
+    if (.verbose>1) cat('Elapsed time is ', .dt, '\n')
+    .t0 <- Sys.time()
+  }
+  if (.verbose) cat('\nMerging dataframes...\n')
+  .pls <- lapply(.pls_l, function(.var_df) 
+    do.call(rbind, .var_df) )
+
+  return( .pls)
+}
+
+preproc_facs_plate <- function(.dir, .out_dir, .f_par, .f_utils, 
+                               .plot, .verbose, .write_format, .min_cells, .pdf_dim, .cache_namer, .force) {
 # preproc_facs_plate loads .fcs files in .dir as a flowSet, apply FSC/SSC gating to select .min_cells
 # subsequently this subset is filtered on channel fl1 to remove background (using a normal + uniform mixture model)
 # optionnaly OD files can be loaded in order to append od values to the statistics
@@ -140,7 +191,7 @@ preproc_facs_plate <- function(.dir, .out_dir, .f_par, .f_utils, .plot=TRUE,
   if (file.exists(.cache_namer(.out_dir)) && !.force) {
     load(.cache_namer(.out_dir)) # load objet .pl
     if (.verbose) cat("Cache loaded from ", basename(.cache_namer(.out_dir)), "\n", sep='')
-    return(.pl)
+    return (.pl)
   }
   
   # if a local FACS params file exists, load it
@@ -149,7 +200,7 @@ preproc_facs_plate <- function(.dir, .out_dir, .f_par, .f_utils, .plot=TRUE,
     source(.fpar_file[1], local=TRUE)
     .f_par <- f_par
     .f_utils <- set_fsc_ssc_gates(.dir, .f_par)
-    if (.verbose) cat("Local FACS parameters loaded...\n")
+#     if (.verbose) cat("Local FACS parameters loaded...\n")
   }
   
   # Prepare output (directory, variables, plot)
@@ -168,8 +219,8 @@ preproc_facs_plate <- function(.dir, .out_dir, .f_par, .f_utils, .plot=TRUE,
   # Load OD file if a pattern is provided
   .f_od = NA
   try({.od_file <- list.files(.dir, pattern=.f_par$od.pattern)
-  .f_od <- read_od_file(file.path(.dir, .od_file), .format='long')
-  if (.verbose>1) cat("OD file read\n\n")}, silent=TRUE)
+       .f_od <- read_od_file(file.path(.dir, .od_file), .format='long')
+       if (.verbose>1) cat("OD file read\n\n")}, silent=TRUE)
   #   if (exists('od.pattern', where=.f_par)) {
   #     .od_file <- list.files(.dir, pattern=.f_par$od.pattern)
   #     .f_od <- read_od_file(file.path(.dir, .od_file), .format='long')
@@ -177,17 +228,16 @@ preproc_facs_plate <- function(.dir, .out_dir, .f_par, .f_utils, .plot=TRUE,
   #     .f_od = NA
   #   }
   
+  if (.verbose>1) cat("Reading .fcs files...\n")  
   .fs <- read.flowSet(path=.dir, full.names=TRUE, pattern=.f_par$file.pattern, phenoData=list(Filename="$FIL", Time="$BTIM"))
   .fs <- .fs[, .f_par$channels]
   if (.verbose>1) cat("number of files read: ", length(.fs), "\n\n")  
   
   # Do all the primary gating on the entire flowSet
+  if (.verbose>1) cat("Gating non debris events...\n")
   fs.cells  <-  Subset(.fs, .f_utils$not.debris.gate)
-  if (.verbose>1) cat("Debris gated\n\n")
+  if (.verbose>1) cat("Transforming data to log...\n")
   fs.cellsT <- .f_utils$ListlogT %on% fs.cells
-  if (.verbose>1) cat("Data Log transformed\n\n")
-  fs.normT <- Subset(fs.cellsT, .f_utils$n2f.gate)
-  if (.verbose>1) cat("Bv Normal filter applied\n\n")
   
   # Do the secondary gating on each flowFrame (in chronological order)
   if (.verbose>1) cat("Subsetting and filtering files:\n")
@@ -196,7 +246,7 @@ preproc_facs_plate <- function(.dir, .out_dir, .f_par, .f_utils, .plot=TRUE,
            'gfp' = which(names(.f_par$channels) == 'fl1'))
   
   for(.file in order(get_flowset_timestamp(.fs)) ) { # process by increasing acquisition time
-    .ff <- fs.normT[[.file]]
+    .ff <- fs.cellsT[[.file]]
     if (.verbose>1) cat(.file, ":", identifier(.ff), "\t", sep="")
     
     .od <- try(.f_od$od[.f_od$well==keyword(.ff, "TUBE NAME")], silent=TRUE) # fetch OD value if od has been loaded
@@ -251,28 +301,33 @@ preproc_facs_sample_secondary <- function(.ff, .out_dir, .ch, .f_par, .od=NA, .m
   .ff_stats <- c(.ff_stats, stats_var_summary(ff.g$gfp, gfp_normal$weights, .xname='gfp'))
   
   if (.plot) {
-    facs_contour_with_polyg(.ff, .ch[c('fsc', 'ssc')], .f_par$lims, .polyg=.g$polygon)
+    facs_contour_with_gate(.ff, .ch[c('fsc', 'ssc')], .f_par$lims, .gate=.g$gate)
     
     if (missing(plot.name)) plot.name <- keyword(.g$ff, "ORIGINALGUID")
     plot.label <- sprintf("m=%.2f  sd=%.2f  n=%d", gfp_normal$theta$mu1,  gfp_normal$theta$sigma1, dim(.g$ff)[1])     
     density_with_normal(exprs(.g$ff[, .ch['gfp']]), list(list(mu=gfp_normal$theta$mu1, sigma=gfp_normal$theta$sigma1, col='red')),
-                             plot.name, plot.label, .lab="log10 GFP (AU)")
+                        plot.name, plot.label, .lab="log10 GFP (AU)")
   }
-  .gate <- .g$polygon
-  try(names(.gate) <- c('fsc', 'ssc'), silent=TRUE)
+  .gate <- .g$gate
   if (!is.null(.gate)) .gate <- data.frame(path=.path, well=.well, .gate)
   
   return(list(gate=.gate, preproc=.ff_preproc, stats=.ff_stats))
 }
 
-find_densest_area <- function(.x, .y, .prop, n.bins=50) {
+find_densest_area <- function(.xy, .prop, n.bins=300) {
 # given a set of points (.x, .y), find_densest_area returns the coordinates of the polygon that 
 # includes .prop of all points in the densest region of the (.x, .y) space:
 # 1. compute the 2D density of points using the KernSmooth library on a n.bins x n.bins lattice
 # 2. compute the exptal cumulative of the density over the grid
 # 3. find the density value within which .prop of all points are included (here called .level)
-  .dens <- KernSmooth::bkde2D(cbind(.x, .y), bandwidth=c(MASS::bandwidth.nrd(.x)/2, MASS::bandwidth.nrd(.y)/2), # need to reduce bandwidth to mimick kde2d
-                              gridsize = c(n.bins, n.bins), range.x=list(range(.x), range(.y)))
+  # from flowViz::contour : set range and bandwidth to estimate kernel density
+  bw <- diff(apply(.xy, 2, quantile, probs = c(0.05, 0.95), na.rm = TRUE))/25
+  xr <- range(.xy[, 1], na.rm = TRUE)
+  yr <- range(.xy[, 2], na.rm = TRUE)
+  range <- list(xr + c(-1, 1) * bw[1] * 2.5, yr + c(-1, 1) * bw[2] * 2.5)
+  .dens <- KernSmooth::bkde2D(.xy, bw, c(n.bins, n.bins), range.x = range)
+  # contour(.dens$x1, .dens$x2, .dens$fhat, nlevels = 8, xlim=3:4, ylim=3:4)
+    
   .dx <- diff(.dens$x1)[1]
   .dy <- diff(.dens$x2)[1]
   .da <- .dx * .dy
@@ -283,41 +338,41 @@ find_densest_area <- function(.x, .y, .prop, n.bins=50) {
   .level.idx <- max( which(.ecdf < .prop))
   .level <- .dens$fhat[.ord][.level.idx]
   .contours <- contourLines(.dens$x1, .dens$x2, .dens$fhat, levels=.level)
-  .polyg <- matrix(c(.contours[[1]]$x, .contours[[1]]$y), ncol=2)
+  # contour(.dens$x1, .dens$x2, .dens$fhat, levels=.level)
+  .n_points <- lapply(.contours, function(.c) length(.c$x))
+  .idx <- which.max(.n_points)
+  if (length(.contours) > 1)
+    warning('contour with multiple regions; gate created from the largest one.')
+  .polyg <- matrix(c(.contours[[.idx]]$x, .contours[[.idx]]$y), ncol=2)
   return(.polyg)
-  
-  # plot(.ecdf)
-  
-  # .keep <- .ord[ which(.dens$fhat[.ord]>.level) ]    
-  # .dens2 <- .dens
-  # .dens2$fhat[.keep] <- max(.dens2$fhat)
-  # image(.dens2$x1, .dens2$x2, .dens2$fhat)
-  # lines(.polyg[[1]]$x, .polyg[[1]]$y)
-  # points(.polyg[[1]]$x, .polyg[[1]]$y)
-  
-  # # find the convex hull of the polygon
-  # .keep.x <- .keep %% n.bins
-  # .keep.y <- floor(.keep/n.bins) + 1
-  # .polyg <- chull(cells.dens$x1[.keep.x], cells.dens$x2[.keep.y])
-  # points(cells.dens$x1[.keep.x][.polyg], cells.dens$x2[.keep.y][.polyg])
 }
 
 gate_fsc_ssc <- function(.ff, .fsc_ch, .ssc_ch, .min_cells=5000, .write_format='tab') {
-# Apply a gate selecting .min_cells in the densest area of the (.fsc, .ssc) space.  
+# gate_fsc_ssc applies a gate selecting .min_cells in the densest area of the (.fsc, .ssc) 
+# space, using a bivariate normal interpolation of the data (norm2Filter). 
+# scale.factor sets the gate area (in stdev-like units); more precisely,
+# scale.factor is the maximal Mahalanobis distance to be included in the gate
+# (http://en.wikipedia.org/wiki/Mahalanobis_distance#Normal_distributions). In
+# order to include a fraction p of the density in the gate, d must follow
+# d^2 = -2 ln(1-p).
+# n is number of events used to calculate the bivariate normal.
   .n_cells <- dim(.ff)[1]
-  
-  # Gate population of cells with similar fsc and ssc values (called .ff.S)
+
   if(.n_cells > .min_cells) {
-    .polyg <- find_densest_area(exprs(.ff[, .fsc_ch]), exprs(.ff[, .ssc_ch]), .prop=.min_cells / .n_cells)
+    .polyg <- find_densest_area(exprs(.ff[, c(.fsc_ch, .ssc_ch)]), .prop=.min_cells / .n_cells)
     colnames(.polyg) <- c(colnames(.ff)[.fsc_ch], colnames(.ff)[.ssc_ch]) # required for gating
     poly.gate <- polygonGate(filterId="similar.cells", .gate=.polyg)
     .ff_s <- Subset(.ff, poly.gate)
     colnames(.polyg) <- c('fsc', 'ssc') # convenient for export
-  }  else { 
+    if (dim(.ff_s)[1] < .8*.min_cells) { # unsuccessful gating
+      .ff_s <- .ff
+      .polyg <- NULL
+    }
+  } else {
     .ff_s <- .ff
-    .polyg <- NULL # matrix(c(contours[[1]]$x, contours[[1]]$y), ncol=2)
+    .polyg <- NULL
   }  
-  return(list(polygon=.polyg, ff=.ff_s))
+  return(list(gate=.polyg, ff=.ff_s))
 }
 
 write.FCS.tab <- function (.x, .filename, .channel, .digits=NULL) {
@@ -441,8 +496,11 @@ propagate_index_info <- function(.pls, .info) {
 # is parsed (using , and ; to split) and corresponding wells are filtered out
 # from all .pls dataframes.
 
+  if (!class(.pls)=='list') stop('propagate_index_info: first argument must be a list.')
+  if (!class(.info)=='data.frame') stop('propagate_index_info: second argument must be a dataframe.')
+  
   if (all(c('well', 'discard') %in% names(.info)))
-    stop("propagate_index_info: .info data frame should have column `discard` or column `well`, not both.")
+    stop("propagate_index_info: second argument must be a dataframe with column `discard` or column `well`, not both.")
   
   # CASE: DISCARD WELLS
   if ('discard' %in% names(.info)) {
@@ -480,9 +538,9 @@ propagate_index_info <- function(.pls, .info) {
     })
 }
 
-#To read into the file downloaded directly from Uri Alon's webpage that contains all the information about the plate. 
-#The file is located in the facs_toolbox and the .join variable refers to to which dataframe of the final list you
-#want to add the information about the genes. 
+#To read into the file downloaded directly from Uri Alon's webpage and converted into csv(the original one is in xlsx format) that contains all the information about the plate. 
+#The file is the path to the file that in my case is located in the facs_toolbox and the .join variable refers to to which dataframe of the final list you
+#want to add the information about the genes name. 
 read_combine_gene_name_file <- function(file ="~/projects/facs_toolbox/alon_all_strains_forweb.csv", .join){
         alon_pwg <- read.csv(file) %>%
                 select (Plate_Number, Well, Gene_Name) %>%
@@ -494,4 +552,5 @@ read_combine_gene_name_file <- function(file ="~/projects/facs_toolbox/alon_all_
         alon_pwg$plate_upper <- NULL
         left_join(.join, alon_pwg, by = c("plate", "well"))
 }
+
 
