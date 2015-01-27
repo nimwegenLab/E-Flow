@@ -26,6 +26,8 @@ theme_set(theme_bw())
 scale_colour_discrete <- function(...) scale_colour_brewer(..., palette="Set1")
 scale_colour_periodic_brewer <- 
   function(...) scale_colour_manual(..., values = rep(c(brewer.pal(4, 'Set1'), 'gray42'), 100))
+scale_shape_periodic <- 
+  function(...) scale_shape_manual(..., values = rep(15:18, 5))
 
 
 ### FUNCTIONS
@@ -538,19 +540,20 @@ propagate_index_info <- function(.pls, .info) {
     })
 }
 
-#To read into the file downloaded directly from Uri Alon's webpage and converted into csv(the original one is in xlsx format) that contains all the information about the plate. 
-#The file is the path to the file that in my case is located in the facs_toolbox and the .join variable refers to to which dataframe of the final list you
-#want to add the information about the genes name. 
-read_combine_gene_name_file <- function(file ="~/projects/facs_toolbox/alon_all_strains_forweb.csv", .join){
-        alon_pwg <- read.csv(file) %>%
-                select (Plate_Number, Well, Gene_Name) %>%
-                rename(plate_upper=Plate_Number, well=Well, gene=Gene_Name)   
-        
-        plate <- data.frame(plate = tolower(alon_pwg$plate_upper))
-        
-        alon_pwg <- cbind(plate, alon_pwg)
-        alon_pwg$plate_upper <- NULL
-        left_join(.join, alon_pwg, by = c("plate", "well"))
+read_combine_gene_name_file <- function(file, .join){
+# To read into the file downloaded directly from Uri Alon's webpage and
+# converted into csv(the original one is in xlsx format) that contains all the
+# information about the plate. The file is the path to the file that in my case
+# is located in the facs_toolbox and the .join variable refers to to which
+# dataframe of the final list you want to add the information about the genes
+# name.
+  alon_pwg <- read.csv(file) %>%
+    select (Plate_Number, Well, Gene_Name) %>%
+    rename(plate_upper=Plate_Number, well=Well, gene=Gene_Name)   
+  
+  plate <- data.frame(plate = tolower(alon_pwg$plate_upper))
+  
+  alon_pwg <- cbind(plate, alon_pwg)
+  alon_pwg$plate_upper <- NULL
+  left_join(.join, alon_pwg, by = c("plate", "well"))
 }
-
-

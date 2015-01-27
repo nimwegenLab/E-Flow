@@ -1,3 +1,4 @@
+# converted to csv from http://wws.weizmann.ac.il/mcb/UriAlon/sites/mcb.UriAlon/files/uploads/ZaslaverEcoli2006/all_strains_forweb.xls
 Plate_Number,Well,Gene_Name,Description,Primer 1,Primer 2,Enzyme1,Enzyme2
 AZ01,A1,rihC,putative purine nucleoside hydrolase,CCGCTCGAGCTGGAAGGCCGTGAAGAA,CGGGATCCGTTCGGGTGCAAAAATCG,xhoI,bamHI
 AZ01,A2,yabP,unknown CDS,CCGCTCGAGGGAGATGGCGAAGCAGAA,CGGGATCCCACGTCCATCTTGTCCCC,xhoI,bamHI
