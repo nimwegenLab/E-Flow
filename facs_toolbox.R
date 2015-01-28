@@ -544,7 +544,7 @@ read_combine_gene_name_file <- function(file, .df_join){
 # reads the csv file (file) downloaded from Alon's webpage with some library
 # info and joins the promoters gene name to a dataframe (.df_join) containing a
 # 'plate' and 'well' column
-        alon_pwg <- read.csv(file) %>%
+        alon_pwg <- read.csv(file, comment.char = "#") %>%
                 select (plate =Plate_Number, well = Well, gene = Gene_Name)           
         .df_join <- mutate(.df_join, plate=toupper(plate))
         left_join(.df_join, alon_pwg, by = c("plate", "well"))
