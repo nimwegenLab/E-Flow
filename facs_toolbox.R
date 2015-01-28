@@ -541,16 +541,11 @@ propagate_index_info <- function(.pls, .info) {
 }
 
 read_combine_gene_name_file <- function(file, .df_join){
-# reads the csv file (file) downloaded from Alon's webpage with the library info and joins
-# the promoters name to a dataframe (.df_join) with a 'plate' and 'well' column
+# reads the csv file (file) downloaded from Alon's webpage with some library
+# info and joins the promoters gene name to a dataframe (.df_join) containing a
+# 'plate' and 'well' column
         alon_pwg <- read.csv(file) %>%
-                select (Plate_Number, Well, Gene_Name) %>%
-                rename(plate=Plate_Number, well=Well, gene=Gene_Name)   
-        
-        df_plate <- data.frame(plate_up = toupper(.df_join$plate))
-        
-        .df_join <- cbind(.df_join, df_plate)
-        .df_join$plate <- NULL
-        .df_join <- rename(.df_join, plate=plate_up)
+                select (plate =Plate_Number, well = Well, gene = Gene_Name)           
+        .df_join <- mutate(.df_join, plate=toupper(plate))
         left_join(.df_join, alon_pwg, by = c("plate", "well"))
 }
