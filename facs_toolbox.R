@@ -48,9 +48,11 @@ read_od_file <- function(.filename, .format='wide') {
 # data is output to wide format by default, but is reshaped if .format == 'long' 
 # do not use file header since the last column does not have a name. rename to 1:12 instead.
 # do not use row names since it does not work with certain export format (eg Gwendoline's)
-  .od <- read.table(.filename, header=FALSE, fill=TRUE)
-  .od <- .od[3:10, 2:13]
-  names(.od) <- 1:12
+# import non numeric cols as characters (rather than factor) and convert to numeric
+  .od <- read.table(.filename, header=FALSE, fill=TRUE, stringsAsFactors=FALSE)
+  .od <- data.frame(apply(.od[3:10,2:13], 2, as.numeric))
+  colnames(.od) <- 1:12
+  rownames(.od) <- LETTERS[1:8]
   
   if (.format == 'long') {
     .od$row <- row.names(.od)
