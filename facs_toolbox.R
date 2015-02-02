@@ -46,9 +46,10 @@ split_well_col <- function(.df, .col='well', .override=FALSE) {
 read_od_file <- function(.filename, .format='wide') {
 # read_od_file reads raw data files produced by xxx spectrophotometer.
 # data is output to wide format by default, but is reshaped if .format == 'long' 
-# do no use file header since the last column does not have a name. rename to 1:12 instead.
-  .od <- read.table(.filename, header=FALSE, row.names=1, fill=TRUE)
-  .od <- .od[3:10,1:12]
+# do not use file header since the last column does not have a name. rename to 1:12 instead.
+# do not use row names since it does not work with certain export format (eg Gwendoline's)
+  .od <- read.table(.filename, header=FALSE, fill=TRUE)
+  .od <- .od[3:10, 2:13]
   names(.od) <- 1:12
   
   if (.format == 'long') {
