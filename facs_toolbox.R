@@ -153,7 +153,8 @@ delete_preproc_files <- function(.dirs, .silent=FALSE,
   for (.dir in .dirs) {
     .out_dir <- data2preproc(.dir)
     file.remove(.cache_namer(.out_dir),
-                file.path(.out_dir, "stats.csv"),
+                file.path(.out_dir, "stats.csv"), # legacy
+                file.path(.out_dir, paste(basename(.out_dir), '_stats.csv', sep='')),
                 file.path(.dir, paste(basename(.dir), 'pdf', sep='.')))
   }
 }
@@ -161,9 +162,10 @@ delete_preproc_files <- function(.dirs, .silent=FALSE,
 preproc_facs_plates <- function(.dirs, .data2preproc, .f_par, .f_utils, .plot=TRUE,
                                .verbose=0,              # console output (0: silent, 1: minimalist, 2: detailled)
                                .write_format=NULL,      # formats in which to write subseted data to .out_dir (vector of strings in 'fcs', 'tab' or both)
-                               .min_cells=5000,         # fraction of data to remove beofre calculating trimmed stats
-                               .pdf_dim=c(2, 2, 6, 8), 	# width, height, rows, columns
-                               .cache_namer = (function(.d) file.path(.d, paste(basename(.d), '_preproc.Rdata', sep=''))),
+                               .min_cells=5000,         # number of cells to select for each sample
+                               .pdf_dim=c(2, 2, 6, 8), 	# control plots dimensions (width, height, #rows, #columns)
+                               .cache_namer=(function(.d) file.path(.d, paste(basename(.d), '_preproc.Rdata', sep=''))),
+                               .drop_preproc=FALSE,     # flag to return a list without the preproc facs data (faster merging for large datasets)
                                .force=FALSE) {          # flag to force analysing raw fcs files even if a cache file exists
 # NB: dataframes are gathered in a list and concatenated only once in order to reduce computing time.
   .pls_l <- list(gates=list(), preproc=list(), stats=list())
@@ -178,9 +180,9 @@ preproc_facs_plates <- function(.dirs, .data2preproc, .f_par, .f_utils, .plot=TR
     if (.verbose>1) cat('Elapsed time is ', .dt, '\n')
     .t0 <- Sys.time()
   }
+  if (.drop_preproc) .pls_l$preproc <- NULL
   if (.verbose) cat('\nMerging dataframes...\n')
-  .pls <- lapply(.pls_l, function(.var_df) 
-    do.call(rbind, .var_df) )
+  .pls <- lapply(.pls_l, function(.var_df) do.call(rbind, .var_df) )
 
   return( .pls)
 }
@@ -267,8 +269,8 @@ preproc_facs_plate <- function(.dir, .out_dir, .f_par, .f_utils,
   if (.verbose>1) cat("\n\n")
   if (.plot) dev.off()
   # output stats
-  write.csv (.stats, file=file.path(.out_dir, "stats.csv"))
-  
+  write.csv (.stats, file=file.path(.out_dir, paste(basename(.out_dir), '_stats.csv', sep='')))
+
   .pl <- list(gates=.gates, preproc=.preproc, stats=.stats)
   save('.pl', file=.cache_namer(.out_dir))
   return(.pl)
