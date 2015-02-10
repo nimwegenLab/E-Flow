@@ -90,7 +90,8 @@ density_with_normal <- function(.xs, .normal, .name, .sub, .lab, .lims=c(0.0,6.0
 # plot the density of a vector .xs, and overlays normal densities as definied by .normal
 # (a list of (mu, sigma, color) lists)
   .dens <- density(.xs)
-  plot(.dens, ty="n", lwd=1, cex.main=.9, xlim=.lims, xlab=.lab, ylab="kernel density", main=.name, sub=.sub)
+  plot(.dens, ty="n", lwd=1, cex.main=.9, xlim=.lims, xlab=.lab, ylab="kernel density", main=.name) #, sub=.sub
+  mtext(.sub, side=1, line=4, cex=0.65) # add info text
   polygon(.dens, col="gray60", border=NA)
   curve(dnorm(x, mean(.xs), sd(.xs)), col="gray30", lwd=.3, add=TRUE)
   for (.n in .normal) curve(dnorm(x, .n$mu, .n$sigma), col=.n$col, lwd=.3, add=TRUE)
@@ -163,7 +164,7 @@ preproc_facs_plates <- function(.dirs, .data2preproc, .f_par, .f_utils, .plot=TR
                                .verbose=0,              # console output (0: silent, 1: minimalist, 2: detailled)
                                .write_format=NULL,      # formats in which to write subseted data to .out_dir (vector of strings in 'fcs', 'tab' or both)
                                .min_cells=5000,         # number of cells to select for each sample
-                               .pdf_dim=c(2, 2, 6, 8), 	# control plots dimensions (width, height, #rows, #columns)
+                               .pdf_dim=c(2, 2.4, 6, 8), 	# control plots dimensions (width, height, #rows, #columns)
                                .cache_namer=(function(.d) file.path(.d, paste0(basename(.d), '_preproc.Rdata'))),
                                .drop_preproc=FALSE,     # flag to return a list without the preproc facs data (faster merging for large datasets)
                                .force=FALSE) {          # flag to force analysing raw fcs files even if a cache file exists
@@ -218,7 +219,7 @@ preproc_facs_plate <- function(.dir, .out_dir, .f_par, .f_utils,
   if(.plot) { # open a new pdf for plots (in raw data dir)
     pdf(file = file.path(.dir, paste(basename(.dir), 'pdf', sep='.')), height=.pdf_dim[2]*.pdf_dim[3], width=.pdf_dim[1]*.pdf_dim[4])
     par(mfrow=c(.pdf_dim[3],.pdf_dim[4]))
-    par(mar=c(3.5, 2.5, 2, .5) + 0.1,
+    par(mar=c(5.5, 2.5, 2, .5) + 0.1,
         mgp=c(1.5, .5, 0),
         tcl=-0.25)
   }
@@ -311,7 +312,9 @@ preproc_facs_sample_secondary <- function(.ff, .out_dir, .ch, .f_par, .od=NA, .m
     facs_contour_with_gate(.ff, .ch[c('fsc', 'ssc')], .f_par$lims, .gate=.g$gate)
     
     if (missing(plot.name)) plot.name <- keyword(.g$ff, "ORIGINALGUID")
-    plot.label <- sprintf("m=%.2f  sd=%.2f  n=%d", gfp_normal$theta$mu1,  gfp_normal$theta$sigma1, dim(.g$ff)[1])     
+    plot.label <- sprintf("n=%d / %d%s\nm=%.2f  v=%.4f", dim(.g$ff)[1], dim(.ff)[1],
+                          ifelse(is.na(.od), '', sprintf('  OD=%.2f', .od)), 
+                          gfp_normal$theta$mu1,  gfp_normal$theta$sigma1^2)     
     density_with_normal(exprs(.g$ff[, .ch['gfp']]), list(list(mu=gfp_normal$theta$mu1, sigma=gfp_normal$theta$sigma1, col='red')),
                         plot.name, plot.label, .lab="log10 GFP (AU)")
   }

@@ -69,7 +69,7 @@ w_info <- w_index %>%
 f_utils <- set_fsc_ssc_gates(w_index$dir[1], f_par)#, .interactive=TRUE)
 
 # facs preprocessing
-mywells <- preproc_facs_plates(unique(w_index$dir), data2preproc, f_par, f_utils, .min_cells=500,
+mywells <- preproc_facs_plates(unique(w_index$dir), data2preproc, f_par, f_utils, .min_cells=5000,
                                .plot=TRUE, .verbose=2, .force=TRUE)
 mywells <- propagate_index_info(mywells, w_info)
 
