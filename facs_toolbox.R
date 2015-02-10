@@ -57,7 +57,7 @@ read_od_file <- function(.filename, .format='wide') {
   if (.format == 'long') {
     .od$row <- row.names(.od)
     .od <- gather_(.od, 'col', 'od', as.character(1:12))
-    .od <- mutate_(.od, .dots=list(well=~paste(row, col, sep='')))
+    .od <- mutate_(.od, .dots=list(well=~paste0(row, col)))
   }
   return(.od)
 }
@@ -100,7 +100,7 @@ set_fsc_ssc_gates <- function(.dir, .f_par, .pattern='A1', .interactive=FALSE) {
 # set_fsc_ssc_gates reads in a single flowFrame in order to create the gates and define log transform.
 # gates can be controlled visually with .interactive=TRUE
   # if a local FACS params file exists, load it
-  .fpar_file <- list.files(.dir, pattern=paste(basename(.dir), '_fpar.[rR]', sep=''), full.names=TRUE)
+  .fpar_file <- list.files(.dir, pattern=paste0(basename(.dir), '_fpar.[rR]'), full.names=TRUE)
   if (length(.fpar_file) > 0) {
     source(.fpar_file[1], local=TRUE)
     .f_par <- f_par
@@ -144,7 +144,7 @@ set_fsc_ssc_gates <- function(.dir, .f_par, .pattern='A1', .interactive=FALSE) {
 }
 
 delete_preproc_files <- function(.dirs, .silent=FALSE, 
-                                 .cache_namer=(function(.d) file.path(.d, paste(basename(.d), '_preproc.Rdata', sep=''))) ) {
+                                 .cache_namer=(function(.d) file.path(.d, paste0(basename(.d), '_preproc.Rdata'))) ) {
 # delete preproc files
   if (.silent) {
     ops <- options(warn = -1)
@@ -154,7 +154,7 @@ delete_preproc_files <- function(.dirs, .silent=FALSE,
     .out_dir <- data2preproc(.dir)
     file.remove(.cache_namer(.out_dir),
                 file.path(.out_dir, "stats.csv"), # legacy
-                file.path(.out_dir, paste(basename(.out_dir), '_stats.csv', sep='')),
+                file.path(.out_dir, paste0(basename(.out_dir), '_stats.csv')),
                 file.path(.dir, paste(basename(.dir), 'pdf', sep='.')))
   }
 }
@@ -164,7 +164,7 @@ preproc_facs_plates <- function(.dirs, .data2preproc, .f_par, .f_utils, .plot=TR
                                .write_format=NULL,      # formats in which to write subseted data to .out_dir (vector of strings in 'fcs', 'tab' or both)
                                .min_cells=5000,         # number of cells to select for each sample
                                .pdf_dim=c(2, 2, 6, 8), 	# control plots dimensions (width, height, #rows, #columns)
-                               .cache_namer=(function(.d) file.path(.d, paste(basename(.d), '_preproc.Rdata', sep=''))),
+                               .cache_namer=(function(.d) file.path(.d, paste0(basename(.d), '_preproc.Rdata'))),
                                .drop_preproc=FALSE,     # flag to return a list without the preproc facs data (faster merging for large datasets)
                                .force=FALSE) {          # flag to force analysing raw fcs files even if a cache file exists
 # NB: dataframes are gathered in a list and concatenated only once in order to reduce computing time.
@@ -202,7 +202,7 @@ preproc_facs_plate <- function(.dir, .out_dir, .f_par, .f_utils,
   }
   
   # if a local FACS params file exists, load it
-  .fpar_file <- list.files(.dir, pattern=paste(basename(.dir), '_fpar.[rR]', sep=''), full.names=TRUE)
+  .fpar_file <- list.files(.dir, pattern=paste0(basename(.dir), '_fpar.[rR]'), full.names=TRUE)
   if (length(.fpar_file) > 0) {
     source(.fpar_file[1], local=TRUE)
     .f_par <- f_par
@@ -269,7 +269,7 @@ preproc_facs_plate <- function(.dir, .out_dir, .f_par, .f_utils,
   if (.verbose>1) cat("\n\n")
   if (.plot) dev.off()
   # output stats
-  write.csv (.stats, file=file.path(.out_dir, paste(basename(.out_dir), '_stats.csv', sep='')))
+  write.csv (.stats, file=file.path(.out_dir, paste0(basename(.out_dir), '_stats.csv')))
 
   .pl <- list(gates=.gates, preproc=.preproc, stats=.stats)
   save('.pl', file=.cache_namer(.out_dir))
@@ -553,4 +553,12 @@ read_combine_gene_name_file <- function(file, .df_join){
                 select (plate =Plate_Number, well = Well, gene = Gene_Name)           
         .df_join <- mutate(.df_join, plate=toupper(plate))
         left_join(.df_join, alon_pwg, by = c("plate", "well"))
+}
+
+d_sum_norm <- function(.x, .means, .sds) {
+  if (length(.means) != length(.sds)) 
+    stop('.means and .sds must have the same length.')
+  lapply(seq_along(.means), function(.i) dnorm(.x, .means[.i], .sds[.i])) %>%
+    do.call(rbind, .) %>%
+    apply(., 2, mean)
 }
