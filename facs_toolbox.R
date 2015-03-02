@@ -563,10 +563,11 @@ read_combine_gene_name_file <- function(file, .df_join){
 
 mean_log10_to_ln <- function(.m)
   return(.m / log10(exp(1)))
-
 var_log10_to_ln <- function(.v)
   return(.v / log10(exp(1))^2)
-
+mean_log10_to_n_ln <- function(.m, .gfp_per_FCMunit=2.884)
+  return(log( .gfp_per_FCMunit * exp(.m / log10(exp(1)))))
+  
 min_noise_vs_n <- function(.sigma2_ab, .beta, .n_bg) {
 # minimal noise relationship as defined in Wolf, et al. 2014 (eqn 66, http://dx.doi.org/10.1101/007237).
   function(.n) ifelse(.n > 2*.n_bg, .sigma2_ab * (1 - .n_bg/.n)^2 + .beta/.n * (1 - .n_bg/.n), NA)
