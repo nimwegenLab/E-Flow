@@ -24,7 +24,8 @@ flowViz.par.set(theme =  trellis.par.get(), reset = TRUE)
 # ggplot2 config
 theme_set(theme_bw())
 scale_colour_discrete <- function(...) scale_colour_brewer(..., palette="Set1")
-scale_colour_periodic_brewer <- 
+# to revert to the default ggplot2 discrete colour scale, use: + ggplot2::scale_colour_discrete()
+scale_colour_periodic_brewer <-
   function(...) scale_colour_manual(..., values = rep(c(brewer.pal(4, 'Set1'), 'gray42'), 100))
 scale_shape_periodic <- 
   function(...) scale_shape_manual(..., values = rep(15:18, 5))
@@ -160,13 +161,13 @@ delete_preproc_files <- function(.dirs, .silent=FALSE,
 }
 
 preproc_facs_plates <- function(.dirs, .data2preproc, .f_par, .f_utils, .plot=TRUE,
-                               .verbose=0,              # console output (0: silent, 1: minimalist, 2: detailled)
-                               .write_format=NULL,      # formats in which to write subseted data to .out_dir (vector of strings in 'fcs', 'tab' or both)
-                               .min_cells=5000,         # number of cells to select for each sample
-                               .pdf_dim=c(2, 2.4, 6, 8), 	# control plots dimensions (width, height, #rows, #columns)
+                               .verbose=0,                # console output (0: silent, 1: minimalist, 2: detailled)
+                               .write_format=NULL,        # formats in which to write subseted data to .out_dir (vector of strings in 'fcs', 'tab' or both)
+                               .min_cells=5000,           # number of cells to select for each sample
+                               .pdf_dim=c(2, 2.4, 6, 8),  # control plots dimensions (width, height, #rows, #columns)
                                .cache_namer=(function(.d) file.path(.d, paste0(basename(.d), '_preproc.Rdata'))),
-                               .drop_preproc=FALSE,     # flag to return a list without the preproc facs data (faster merging for large datasets)
-                               .force=FALSE) {          # flag to force analysing raw fcs files even if a cache file exists
+                               .drop_preproc=FALSE,       # flag to return a list without the preproc facs data (faster merging for large datasets)
+                               .force=FALSE) {            # flag to force analysing raw fcs files even if a cache file exists
 # NB: dataframes are gathered in a list and concatenated only once in order to reduce computing time.
   .pls_l <- list(gates=list(), preproc=list(), stats=list())
   .t0 <- Sys.time()
@@ -580,18 +581,17 @@ min_noise_manual_fit <- function(.mean_ln, .var_ln, .m_bg=NA, .bsize=NA, .extr_n
                                  .gfp_per_FCMunit=2.884) {
 # min_noise_manual_fit helps the user choosing parameter values to fit manually
 # the minimal noise relationship as defined in Wolf, et al. 2014 (eqn 66, http://dx.doi.org/10.1101/007237).
+# mn_fit <- min_noise_manual_fit(mean_log10_to_ln(pr_stats$gfp_mean_noise_rm),
+# var_log10_to_ln(pr_stats$gfp_var_noise_rm))
   stopifnot(length(.mean_ln) == length(.var_ln))
   cat("\nHint: make sure that your data are transformed with ln and not log10...")
-  
-#   $corvar{$gene} = $s[4]-450*(1.0-582.36/(2.884*exp($s[3])))/(2.884*exp($s[3]))-0.025*(1.0-582.36/(2.884*exp($s[3])))*(1.0-582.36/(2.884*exp($s[3])));
-  
+    
   if (is.na(.m_bg)) {
-    cat("\nPlease enter your estimation of background fluo ln mean (e.g. from empty plasmid measurements):")
+    cat("\nPlease enter your estimation of background fluo mean (in linear scale; e.g. from empty plasmid measurements):")
     .m_bg <- scan(n=1, what=numeric())
   }
   .n_bg <- .gfp_per_FCMunit * .m_bg
-  .n_ln <- log( .gfp_per_FCMunit * exp(.mean_ln) - .n_bg )
-
+  .n_ln <- log( .gfp_per_FCMunit * exp(.mean_ln)) # - .n_bg 
   if (is.na(.extr_noise)) {
     value_set <- FALSE
     while (!value_set) {
@@ -645,7 +645,7 @@ min_noise_manual_fit <- function(.mean_ln, .var_ln, .m_bg=NA, .bsize=NA, .extr_n
   }
   
   .excess_noise <- .var_ln - (min_noise_vs_n_ln(.extr_noise, .bsize, .n_bg))(.n_ln)
-  return(list(m_bg=.m_bg, bsize=.bsize, extr_noise=.extr_noise, n_ln=.n_ln, excess_noise=.excess_noise))
+  return(list(n_bg=.n_bg, bsize=.bsize, extr_noise=.extr_noise, n_ln=.n_ln, excess_noise=.excess_noise))
 }
 
 d_sum_norm <- function(.x, .means, .sds) {
