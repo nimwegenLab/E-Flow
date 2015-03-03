@@ -583,9 +583,9 @@ min_noise_manual_fit <- function(.mean_ln, .var_ln, .m_bg=NA, .bsize=NA, .extr_n
 # min_noise_manual_fit helps the user choosing parameter values to fit manually
 # the minimal noise relationship as defined in Wolf, et al. 2014 (eqn 66, http://dx.doi.org/10.1101/007237).
 # mn_fit <- min_noise_manual_fit(mean_log10_to_ln(pr_stats$gfp_mean_noise_rm),
-# var_log10_to_ln(pr_stats$gfp_var_noise_rm))
+#                                var_log10_to_ln(pr_stats$gfp_var_noise_rm))
   stopifnot(length(.mean_ln) == length(.var_ln))
-  cat("\nHint: make sure that your data are transformed with ln and not log10...")
+  cat("\nHint: make sure that your data are transformed with ln and not log10...\n")
     
   if (is.na(.m_bg)) {
     cat("\nPlease enter your estimation of background fluo mean (in linear scale; e.g. from empty plasmid measurements):")
@@ -593,20 +593,57 @@ min_noise_manual_fit <- function(.mean_ln, .var_ln, .m_bg=NA, .bsize=NA, .extr_n
   }
   .n_bg <- .gfp_per_FCMunit * .m_bg
   .n_ln <- log( .gfp_per_FCMunit * exp(.mean_ln)) # - .n_bg 
-  if (is.na(.extr_noise)) {
+  plp <- qplot(.n_ln, .var_ln, size=I(.5)) + expand_limits(y=0)
+  print(plp)  
+  
+  # if burst size is given, adjust extrinsic noise
+  if (is.na(.extr_noise) && !is.na(.bsize)) {
+    value_set <- FALSE
+    while (!value_set) {
+      cat("\nPlease enter your estimation of extrinsic noise (i.e. var at high mean levels):")
+      cat("\nHint: you can enter several values to see them plotted all at once...")
+      .extr_noise <- scan(what=numeric())
+      
+      .xs <- seq(6.5, 13, length.out=500)
+      myfns <- data.frame(extr_noise=.extr_noise) %>%
+        group_by(extr_noise) %>%
+        do((function(.df) data.frame(n_ln=.xs, var_ln=(min_noise_vs_n_ln(.df$extr_noise, .bsize, .n_bg))(.xs)))(.))
+      
+      pl <- plp +
+        geom_line(aes(x=n_ln, y=var_ln, col=factor(extr_noise)), data=myfns, size=1) +
+        labs(col='extrinsic\nnoise')
+      print(pl)  
+      
+      cat("\nIs this plot correct (y or n)?\n")
+      try(y <- scan(n=1, what=character()))
+      if (length(y) == 1) {
+        if (y == "y") {
+          if (length(.extr_noise) > 1) {
+            cat("\nPlease choose a single value of extrinsic noise before validating.")
+          } else { 
+            value_set <- TRUE
+          }
+        }
+      }
+    }
+  }
+  
+  # if no params are given, adjust extrinsic noise first, then burst size
+  if (is.na(.extr_noise) && is.na(.bsize)) {
     value_set <- FALSE
     while (!value_set) {
       cat("\nPlease enter your estimation of extrinsic noise (i.e. var at high mean levels):")
       .extr_noise <- scan(n=1, what=numeric())
       
-      pl <- qplot(.n_ln, .var_ln) + 
-        geom_hline(yintercept=.extr_noise, col='red') +
-        expand_limits(y=0)
+      pl <- plp +
+        geom_hline(yintercept=.extr_noise, col='red')
       print(pl)
       
       cat("\nIs this plot correct (y or n)?\n")
-      y <- scan(n=1, what=character())
-      if (y == "y") value_set <- TRUE
+      try(y <- scan(n=1, what=character()))
+      if (length(y) == 1) {
+        if (y == "y") value_set <- TRUE
+      }
     }
   }
   
@@ -623,23 +660,25 @@ min_noise_manual_fit <- function(.mean_ln, .var_ln, .m_bg=NA, .bsize=NA, .extr_n
 #       for (.b in .bsize) 
 #         pl <- pl + stat_function(aes(col=factor(.b)), fun=min_noise_b(.b))
 #       print(pl + labs(col="burst size"))
-      .xs <- seq(5, 13, length.out=1000)
+      .xs <- seq(6.5, 13, length.out=500)
       myfns <- data.frame(bsize=.bsize) %>%
         group_by(bsize) %>%
         do((function(.df) data.frame(n_ln=.xs, var_ln=(min_noise_vs_n_ln(.extr_noise, .df$bsize, .n_bg))(.xs)))(.))
-  
-      pl <- ggplot(data=NULL, aes(x=n_ln, y=var_ln)) + expand_limits(y=0) +
-        geom_point(data=data.frame(n_ln=.n_ln, var_ln=.var_ln), size=.5) +
-        geom_line(aes(col=factor(bsize)), data=myfns, size=1)
-      print(pl)  
-
+      
+      pl <- plp +
+        geom_line(aes(x=n_ln, y=var_ln, col=factor(bsize)), data=myfns, size=1) +
+        labs(col='burst size')
+      print(pl)
+      
       cat("\nIs this plot correct (y or n)?\n")
-      y <- scan(n=1, what=character())
-      if (y == "y") {
-        if (length(.bsize) > 1) {
-          cat("\nPlease choose a single value of transcription burst size before validating.")
-        } else { 
-          value_set <- TRUE
+      try(y <- scan(n=1, what=character()))
+      if (length(y) == 1) {
+        if (y == "y") {
+          if (length(.bsize) > 1) {
+            cat("\nPlease choose a single value of transcription burst size before validating.")
+          } else { 
+            value_set <- TRUE
+          }
         }
       }
     }
