@@ -8,14 +8,14 @@ mean_log10_to_n_ln <- function(.m, .gfp_per_FCMunit=2.884)
   # or log( .gfp_per_FCMunit * exp(.m / log10(e)))
   return(.m / log10(exp(1)) + log(.gfp_per_FCMunit) )
 
-min_noise_vs_n <- function(.sigma2_ab, .beta, .n_bg) {
+noise_vs_n <- function(.sigma2, .beta, .n_bg) {
   # minimal noise relationship as defined in Wolf, et al. 2014 (eqn 66, http://dx.doi.org/10.1101/007237).
-  function(.n) ifelse(.n > 2*.n_bg, .sigma2_ab * (1 - .n_bg/.n)^2 + .beta/.n * (1 - .n_bg/.n), NA)
+  function(.n) ifelse(.n > 2*.n_bg, .sigma2 * (1 - .n_bg/.n)^2 + .beta/.n * (1 - .n_bg/.n), NA)
 }
 
-min_noise_vs_n_ln <- function(.sigma2_ab, .beta, .n_bg) {
+noise_vs_n_ln <- function(.sigma2, .beta, .n_bg) {
   # minimal noise relationship derived from Wolf, et al. 2014 (eqn 66, http://dx.doi.org/10.1101/007237).
-  function(.n_ln) (min_noise_vs_n(.sigma2_ab, .beta, .n_bg))(exp(.n_ln))
+  function(.n_ln) (noise_vs_n(.sigma2, .beta, .n_bg))(exp(.n_ln))
 }
 
 d_sum_norm <- function(.x, .means, .sds) {
@@ -57,7 +57,7 @@ min_noise_manual_fit <- function(.mean_ln, .var_ln, .m_bg=NA, .bsize=NA, .extr_n
       .xs <- seq(6.5, 13, length.out=500)
       myfns <- data.frame(extr_noise=.extr_noise) %>%
         group_by(extr_noise) %>%
-        do((function(.df) data.frame(n_ln=.xs, var_ln=(min_noise_vs_n_ln(.df$extr_noise, .bsize, .n_bg))(.xs)))(.))
+        do((function(.df) data.frame(n_ln=.xs, var_ln=(noise_vs_n_ln(.df$extr_noise, .bsize, .n_bg))(.xs)))(.))
       
       pl <- plp +
         geom_line(aes(x=n_ln, y=var_ln, col=factor(extr_noise)), data=myfns, size=1) +
@@ -105,7 +105,7 @@ min_noise_manual_fit <- function(.mean_ln, .var_ln, .m_bg=NA, .bsize=NA, .extr_n
       cat("\nHint: you can enter several values to see them plotted all at once...")
       .bsize <- scan(what=numeric())
       
-      #       min_noise_b <- function(.b) min_noise_vs_n_ln(.extr_noise, .b, .n_bg)
+      #       min_noise_b <- function(.b) noise_vs_n_ln(.extr_noise, .b, .n_bg)
       #       pl <- qplot(.n_ln, .var_ln) + expand_limits(y=0)
       #       for (.b in .bsize) 
       #         pl <- pl + stat_function(aes(col=factor(.b)), fun=min_noise_b(.b))
@@ -113,7 +113,7 @@ min_noise_manual_fit <- function(.mean_ln, .var_ln, .m_bg=NA, .bsize=NA, .extr_n
       .xs <- seq(6.5, 13, length.out=500)
       myfns <- data.frame(bsize=.bsize) %>%
         group_by(bsize) %>%
-        do((function(.df) data.frame(n_ln=.xs, var_ln=(min_noise_vs_n_ln(.extr_noise, .df$bsize, .n_bg))(.xs)))(.))
+        do((function(.df) data.frame(n_ln=.xs, var_ln=(noise_vs_n_ln(.extr_noise, .df$bsize, .n_bg))(.xs)))(.))
       
       pl <- plp +
         geom_line(aes(x=n_ln, y=var_ln, col=factor(bsize)), data=myfns, size=1) +
@@ -134,6 +134,154 @@ min_noise_manual_fit <- function(.mean_ln, .var_ln, .m_bg=NA, .bsize=NA, .extr_n
     }
   }
   
-  .excess_noise <- .var_ln - (min_noise_vs_n_ln(.extr_noise, .bsize, .n_bg))(.n_ln)
+  .excess_noise <- .var_ln - (noise_vs_n_ln(.extr_noise, .bsize, .n_bg))(.n_ln)
   return(list(n_bg=.n_bg, bsize=.bsize, extr_noise=.extr_noise, n_ln=.n_ln, excess_noise=.excess_noise))
 }
+
+### PARAMETERS INFERENCE FOR ERIK'S MODEL ####
+
+epsilon_opt <- function(.vp1, .vp2) {
+  # eq. 38
+  stopifnot(length(.vp1)==length(.vp2)) # "different number of measurements in the two replicates"
+  .n <- length(.vp1)
+  .epsilon <- sum((.vp1-.vp2)^2) / (2*.n)
+  return(.epsilon)
+}
+
+sig2_coef <- function(.np, .nbg) {
+  # eq. 4
+  .out <- (1-(.nbg/.np))^2
+  return(.out)
+}
+beta_coef <- function(.np, .nbg) {
+  # eq. 5
+  .out <- (1-(.nbg/.np)) / .np
+  return(.out)
+}
+
+w_prom <- function(.ap,.bp,.epsilon,.gamma,.lambda){
+# eq. 17
+  .out <- 1 / (.epsilon^2 + (.bp*.gamma)^2 + (.ap*.lambda)^2)
+  return(.out)
+}
+
+avg_prod <- function(.a, .b, .c){
+# average product (eq. 21)
+  stopifnot(length(.a)==length(.b) && length(.a)==length(.c))
+  .out <- sum(.a * .b * .c) / length(.a)
+  return(.out)
+}
+
+sig2_opt <- function(.w,.a,.b,.v){
+# eq. 19
+  .out <- ( avg_prod(.w,.b,.v)*avg_prod(.w,.a,.b) - avg_prod(.w,.b,.b)*avg_prod(.w,.a,.v) ) /
+    ( avg_prod(.w,.a,.b)^2 - avg_prod(.w,.a,.a)*avg_prod(.w,.b,.b) )
+  return(.out)
+}
+beta_opt <- function(.w,.a,.b,.v){
+  # eq. 20
+  .out <- ( avg_prod(.w,.a,.v)*avg_prod(.w,.a,.b) - avg_prod(.w,.a,.a)*avg_prod(.w,.b,.v) ) /
+    ( avg_prod(.w,.a,.b)^2 - avg_prod(.w,.a,.a)*avg_prod(.w,.b,.b) )
+  return(.out)
+}
+
+logL_factory <- function(.np,.vp,.nbg,.epsilon){
+  .ap <- sig2_coef(.np, .nbg)
+  .bp <- beta_coef(.np, .nbg)
+  #   return(
+  function(.lambda, .gamma, .plot=FALSE){
+    stopifnot(length(.lambda)==1 && length(.gamma)==1)
+    # eq. 17
+    .wp <- w_prom(.ap,.bp,.epsilon,.gamma,.lambda)
+    .sig2_opt <- sig2_opt(.wp,.ap,.bp,.vp)
+    .beta_opt <- beta_opt(.wp,.ap,.bp,.vp)
+    print(sprintf('%f %f : %f %f', .lambda, .gamma, .sig2_opt, .beta_opt))
+    # plot
+    if (.plot) {
+      .pl <- ggplot(data=data.frame(np=.np, vp=.vp, ve=.ap*.sig2_opt+.bp*.beta_opt)) +
+        geom_point(aes(x=np, y=vp, col="data")) +
+        geom_point(aes(x=np, y=ve, col="estimation")) +
+        scale_x_continuous(trans="log10", breaks=10^(1:7), labels=sprintf('log(%d)', 10^(1:7))) +
+        expand_limits(y=0) +
+        guides(col='none') + labs(title=sprintf('sig2=%.4f beta=%.1f', .sig2_opt, .beta_opt))
+      print(.pl)
+    }
+    # eq. 16 (the dummy constant is not written)
+    .Ls <- -sum( (.vp-.ap*.sig2_opt-.bp*.beta_opt)^2 * .wp) #  + log(1/.wp)
+    return(list(L=.Ls, sig2=.sig2_opt, beta=.beta_opt))
+  }#)
+}
+
+logL_factory_optimWrapper <- function(.fun) {
+  return( function(.pars) {
+    .lambda <- .pars["lambda"]
+    .gamma <- .pars["gamma"]
+    .fun(.lambda, .gamma)$L
+  } )
+}
+
+# lambda_gamma_optimum <- optim(logL_factory)
+# test <- logL_factory(a,b,c,d)
+# optim(c(lambda=0,gamma=0),test)
+
+variance_per_optimum <- function(.wp,.ap,.bp){
+  .denom <- length(.wp) * (avg_prod(.wp,.ap,.ap)*avg_prod(.wp,.bp,.bp) - avg_prod(.wp,.ap,.bp)^2)
+  # eq. 26
+  .var_sig2 <- avg_prod(.wp,.bp,.bp)/.denom
+  # eq. 27
+  .var_beta <- avg_prod(.wp,.ap,.ap)/.denom
+  # eq. 28
+  .covar <- avg_prod(.wp,.ap,.bp)/.denom
+  return(list(sig2=.var_sig2, beta=.var_beta, covar=.covar))
+}
+
+variance_promoter_opt <- function(.vp,.ap,.bp,.sig2_opt,.beta_opt){
+  # eq. 32
+  .out <- .vp - .ap*.sig2_opt - .bp*.beta_opt
+  return(.out)
+}
+
+sig2_promoter <- function(.epsilon,.ap,.bp,.wp){
+  # eq. 33
+  .out <- .epsilon^2 + 
+           (.ap^2*avg_prod(.wp,.bp,.bp) + .bp^2*avg_prod(.wp,.ap,.ap) - 2*.ap*.bp*avg_prod(.wp,.ap,.bp)) /
+              (length(.ap) * (avg_prod(.wp,.ap,.ap)*avg_prod(.wp,.bp,.bp) - avg_prod(.wp,.ap,.bp)^2))
+  return(.out)
+}
+
+prom_contrib_opt <- function(.vp_opt,.ap,.bp,.sig2p,.lambda,.gamma){
+  .factor <- .vp_opt / (.sig2p + .ap^2*.lambda^2 + .bp^2*.gamma^2)
+  # eq. 30
+  .eta_opt <- .factor * .ap*.lambda^2
+  # eq. 31
+  .delta_opt <- .factor * .bp*.gamma^2
+  return(list(eta=.eta_opt, delta=.delta_opt))
+}
+
+prom_contrib_var <- function(.ap,.bp,.lambda,.gamma,.sig2p){
+  .denom <- .sig2p + .ap^2*.lambda^2 + .bp^2*.gamma^2
+  # eq. 34
+  .etap_var= .lambda^2 * (.sig2p+.bp^2*.gamma^2) / .denom
+  # eq. 35
+  .deltap_var= .gamma^2 * (.sig2p+.ap^2*.lambda^2) / .denom
+  # eq. 36
+  .covar= - .ap*.bp*.lambda^2*.gamma^2 / .denom
+  return(list(eta=.etap_var,delta=.deltap_var,covar=.covar))
+}
+
+beta_promoter <- function(.beta,.deltap){
+# eq. 3
+  return(.beta + .deltap)
+}
+
+sig2_promoter <- function(.var,.etap){
+# eq. 2
+  return(.var + .etap)
+}
+
+variance_promoter <- function(.np,.sig2p,.betap,.nbg){
+  #eq 1
+  .out <- .sig2p * (1-(.nbg/.np))^2 + .betap*(1-(.nbg/.np))/.np
+  return(.out)
+}
+

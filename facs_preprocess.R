@@ -174,7 +174,11 @@ preproc_facs_plate <- function(.dir, .out_dir, .f_par, .f_utils,
   if (length(.fpar_file) > 0) {
     source(.fpar_file[1], local=TRUE)
     .f_par <- f_par
-    .f_utils <- set_fsc_ssc_gates(.dir, .f_par)
+    if (exists("pattern")) {
+      .f_utils <- set_fsc_ssc_gates(.dir, .f_par, .pattern=pattern)      
+    } else {
+      .f_utils <- set_fsc_ssc_gates(.dir, .f_par)
+    }
     #     if (.verbose) cat("Local FACS parameters loaded...\n")
   }
   
