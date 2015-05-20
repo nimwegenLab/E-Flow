@@ -2,7 +2,7 @@
 proj_path <- "~/Documents/Biozentrum/Projects/vngWetLabR/facs/example"
 pl_index_file <- "exampleIndex_plates.csv" # index file by plate
 w_index_file <- "exampleIndex_wells.csv"  # index file by well
-scripts_path <- "~/Documents/Biozentrum/Projects/vngWetLabR/facs/facs_toolbox.R"
+scripts_path <- "~/Documents/Biozentrum/Projects/vngWetLabR/facs"
 data2preproc <- function(.d) sub('/data/', '/preproc/', .d) # store cache file in preproc subdir
 # data2preproc <- identity # store cache files with raw data
 
@@ -21,7 +21,8 @@ f_par <- list(
 
 ### ANALYSIS
 setwd(proj_path)
-source(scripts_path)
+file.sources = list.files(scripts_path, pattern="\\.[Rr]$", full.names=TRUE, ignore.case=TRUE)
+invisible(sapply(file.sources, source, .GlobalEnv))
 
 ### Load data defined per plate
 
