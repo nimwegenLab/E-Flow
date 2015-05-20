@@ -148,12 +148,12 @@ epsilon_opt <- function(.vp1, .vp2) {
   return(.epsilon)
 }
 
-sig2_coef <- function(.np, .nbg) {
+sig2_par <- function(.np, .nbg) {
   # eq. 4
   .out <- (1-(.nbg/.np))^2
   return(.out)
 }
-beta_coef <- function(.np, .nbg) {
+beta_par <- function(.np, .nbg) {
   # eq. 5
   .out <- (1-(.nbg/.np)) / .np
   return(.out)
@@ -173,23 +173,23 @@ avg_prod <- function(.a, .b, .c){
 }
 
 sig2_opt <- function(.w,.a,.b,.v){
-# eq. 19
+# eq. 19: typical sigma2 (extrinsic noise) for all promoters
   .out <- ( avg_prod(.w,.b,.v)*avg_prod(.w,.a,.b) - avg_prod(.w,.b,.b)*avg_prod(.w,.a,.v) ) /
     ( avg_prod(.w,.a,.b)^2 - avg_prod(.w,.a,.a)*avg_prod(.w,.b,.b) )
   return(.out)
 }
 beta_opt <- function(.w,.a,.b,.v){
-  # eq. 20
+  # eq. 20: typical beta (burst size) for all promoters
   .out <- ( avg_prod(.w,.a,.v)*avg_prod(.w,.a,.b) - avg_prod(.w,.a,.a)*avg_prod(.w,.b,.v) ) /
     ( avg_prod(.w,.a,.b)^2 - avg_prod(.w,.a,.a)*avg_prod(.w,.b,.b) )
   return(.out)
 }
 
-logL_factory <- function(.np,.vp,.nbg,.epsilon){
-  .ap <- sig2_coef(.np, .nbg)
-  .bp <- beta_coef(.np, .nbg)
+logL_factory <- function(.np, .vp, .nbg, .epsilon){
+  .ap <- sig2_par(.np, .nbg)
+  .bp <- beta_par(.np, .nbg)
   #   return(
-  function(.lambda, .gamma, .print=FALSE, .plot=FALSE){
+  function(.lambda, .gamma, .plot=FALSE){
     stopifnot(length(.lambda)==1 && length(.gamma)==1)
     # L is defined only for positive lambda and gamma
     if (.lambda<0 || .gamma<0) {
@@ -199,9 +199,6 @@ logL_factory <- function(.np,.vp,.nbg,.epsilon){
     .wp <- w_prom(.ap,.bp,.epsilon,.gamma,.lambda)
     .sig2_opt <- sig2_opt(.wp,.ap,.bp,.vp)
     .beta_opt <- beta_opt(.wp,.ap,.bp,.vp)
-    if (.print) {
-      print(sprintf('%f %f : %f %f', .lambda, .gamma, .sig2_opt, .beta_opt))
-    }
     # plot
     if (.plot) {
       .pl <- ggplot(data=data.frame(np=.np, vp=.vp, ve=.ap*.sig2_opt+.bp*.beta_opt)) +
@@ -226,11 +223,7 @@ logL_factory_optimWrapper <- function(.fun) {
   } )
 }
 
-# lambda_gamma_optimum <- optim(logL_factory)
-# test <- logL_factory(a,b,c,d)
-# optim(c(lambda=0,gamma=0),test)
-
-variance_per_optimum <- function(.wp,.ap,.bp){
+pars_opt_var <- function(.wp,.ap,.bp){
   .denom <- length(.wp) * (avg_prod(.wp,.ap,.ap)*avg_prod(.wp,.bp,.bp) - avg_prod(.wp,.ap,.bp)^2)
   # eq. 26
   .var_sig2 <- avg_prod(.wp,.bp,.bp)/.denom
@@ -241,13 +234,13 @@ variance_per_optimum <- function(.wp,.ap,.bp){
   return(list(sig2=.var_sig2, beta=.var_beta, covar=.covar))
 }
 
-variance_promoter_opt <- function(.vp,.ap,.bp,.sig2_opt,.beta_opt){
+variance_prom_opt <- function(.vp,.ap,.bp,.sig2_opt,.beta_opt){
   # eq. 32
   .out <- .vp - .ap*.sig2_opt - .bp*.beta_opt
   return(.out)
 }
 
-sig2_promoter <- function(.epsilon,.ap,.bp,.wp){
+xi_prom <- function(.epsilon,.ap,.bp,.wp){
   # eq. 33
   .out <- .epsilon^2 + 
            (.ap^2*avg_prod(.wp,.bp,.bp) + .bp^2*avg_prod(.wp,.ap,.ap) - 2*.ap*.bp*avg_prod(.wp,.ap,.bp)) /
@@ -255,8 +248,8 @@ sig2_promoter <- function(.epsilon,.ap,.bp,.wp){
   return(.out)
 }
 
-prom_contrib_opt <- function(.vp_opt,.ap,.bp,.sig2p,.lambda,.gamma){
-  .factor <- .vp_opt / (.sig2p + .ap^2*.lambda^2 + .bp^2*.gamma^2)
+prom_deviations_opt <- function(.vp_opt, .ap,.bp,.xip,.lambda,.gamma){
+  .factor <- .vp_opt / (.xip + .ap^2*.lambda^2 + .bp^2*.gamma^2)
   # eq. 30
   .eta_opt <- .factor * .ap*.lambda^2
   # eq. 31
@@ -264,28 +257,28 @@ prom_contrib_opt <- function(.vp_opt,.ap,.bp,.sig2p,.lambda,.gamma){
   return(list(eta=.eta_opt, delta=.delta_opt))
 }
 
-prom_contrib_var <- function(.ap,.bp,.lambda,.gamma,.sig2p){
-  .denom <- .sig2p + .ap^2*.lambda^2 + .bp^2*.gamma^2
+prom_deviations_var <- function(.ap,.bp,.lambda,.gamma,.xip){
+  .denom <- .xip + .ap^2*.lambda^2 + .bp^2*.gamma^2
   # eq. 34
-  .etap_var= .lambda^2 * (.sig2p+.bp^2*.gamma^2) / .denom
+  .etap_var= .lambda^2 * (.xip+.bp^2*.gamma^2) / .denom
   # eq. 35
-  .deltap_var= .gamma^2 * (.sig2p+.ap^2*.lambda^2) / .denom
+  .deltap_var= .gamma^2 * (.xip+.ap^2*.lambda^2) / .denom
   # eq. 36
   .covar= - .ap*.bp*.lambda^2*.gamma^2 / .denom
   return(list(eta=.etap_var,delta=.deltap_var,covar=.covar))
 }
 
-beta_promoter <- function(.beta,.deltap){
+beta_prom <- function(.beta,.deltap){
 # eq. 3
   return(.beta + .deltap)
 }
 
-sig2_promoter <- function(.var,.etap){
+sig2_prom <- function(.var,.etap){
 # eq. 2
   return(.var + .etap)
 }
 
-variance_promoter <- function(.np,.sig2p,.betap,.nbg){
+variance_prom <- function(.np,.sig2p,.betap,.nbg){
   #eq 1
   .out <- .sig2p * (1-(.nbg/.np))^2 + .betap*(1-(.nbg/.np))/.np
   return(.out)
@@ -310,8 +303,8 @@ simul_inference_data <- function(.n_p, # promoters' mean expression (in nb of GF
 # points(log10(lg_opt$par["lambda"]),log10(lg_opt$par["gamma"]), col="red")
   
   .n <- length(.n_p)
-  .a <- sig2_coef(.n_p, rep(.n_bg, .n))
-  .b <- beta_coef(.n_p, rep(.n_bg, .n))
+  .a <- sig2_par(.n_p, rep(.n_bg, .n))
+  .b <- beta_par(.n_p, rep(.n_bg, .n))
   .out <- data.frame(id=1:.n,
                      n=.n_p,
                      eta=rnorm(.n, 0, .lambda),
