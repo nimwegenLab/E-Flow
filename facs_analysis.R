@@ -189,13 +189,19 @@ logL_factory <- function(.np,.vp,.nbg,.epsilon){
   .ap <- sig2_coef(.np, .nbg)
   .bp <- beta_coef(.np, .nbg)
   #   return(
-  function(.lambda, .gamma, .plot=FALSE){
+  function(.lambda, .gamma, .print=FALSE, .plot=FALSE){
     stopifnot(length(.lambda)==1 && length(.gamma)==1)
+    # L is defined only for positive lambda and gamma
+    if (.lambda<0 || .gamma<0) {
+      return(list(L=NA, sig2=NA, beta=NA))
+    }
     # eq. 17
     .wp <- w_prom(.ap,.bp,.epsilon,.gamma,.lambda)
     .sig2_opt <- sig2_opt(.wp,.ap,.bp,.vp)
     .beta_opt <- beta_opt(.wp,.ap,.bp,.vp)
-    print(sprintf('%f %f : %f %f', .lambda, .gamma, .sig2_opt, .beta_opt))
+    if (.print) {
+      print(sprintf('%f %f : %f %f', .lambda, .gamma, .sig2_opt, .beta_opt))
+    }
     # plot
     if (.plot) {
       .pl <- ggplot(data=data.frame(np=.np, vp=.vp, ve=.ap*.sig2_opt+.bp*.beta_opt)) +
@@ -206,8 +212,8 @@ logL_factory <- function(.np,.vp,.nbg,.epsilon){
         guides(col='none') + labs(title=sprintf('sig2=%.4f beta=%.1f', .sig2_opt, .beta_opt))
       print(.pl)
     }
-    # eq. 16 (the dummy constant is not written)
-    .Ls <- -sum( (.vp-.ap*.sig2_opt-.bp*.beta_opt)^2 * .wp) #  + log(1/.wp)
+    # eq. 16 (do not use eq. 18 to estimate lambda and gamma)
+    .Ls <- -sum( (.vp-.ap*.sig2_opt-.bp*.beta_opt)^2 * .wp + log(1/.wp) )
     return(list(L=.Ls, sig2=.sig2_opt, beta=.beta_opt))
   }#)
 }
@@ -285,3 +291,33 @@ variance_promoter <- function(.np,.sig2p,.betap,.nbg){
   return(.out)
 }
 
+# data simulation for inference validation
+simul_inference_data <- function(.n_p, # promoters' mean expression (in nb of GFP)
+                                 .sig2=.02, .beta=500, .n_bg=600,
+                                 .lambda=.01, .gamma=100,
+                                 .epsilon=0.001 ) {
+# simulate variance from means, according to Erik's model. Example:
+# p_sim <- simul_inference_data(rlnorm(500, 7, 1.5), .lambda=.01)
+# qplot(n, v_exp, data=p_sim, log="x") + expand_limits(y=0)
+# llf <- logL_factory(p_sim$n, p_sim$v_exp, p_sim$n_bg, 0.001)
+# lg_opt <- optim(c(lambda=.01,gamma=100), logL_factory_optimWrapper(llf),
+#                 control=list(fnscale=-1)) # fnscale=-1 to find maximum
+# 
+# X <- 10^seq(-4, -1, length=110)
+# Y <- 10^seq(1.8, 2.2, length=110)
+# Z <- outer(X, Y, (function(.l, .g) llf(.l, .g)$L) %>% Vectorize())
+# contour(log10(X), log10(Y), Z)
+# points(log10(lg_opt$par["lambda"]),log10(lg_opt$par["gamma"]), col="red")
+  
+  .n <- length(.n_p)
+  .a <- sig2_coef(.n_p, rep(.n_bg, .n))
+  .b <- beta_coef(.n_p, rep(.n_bg, .n))
+  .out <- data.frame(id=1:.n,
+                     n=.n_p,
+                     eta=rnorm(.n, 0, .lambda),
+                     delta=rnorm(.n, 0, .gamma))
+  
+  .out <- mutate(.out, v = .a*.sig2 + .b*.beta + .a*eta + .b*delta,
+                 v_exp = v + rnorm(.n, 0, .epsilon), n_bg=.n_bg) %>%
+    filter(n > 2*.n_bg)
+}
