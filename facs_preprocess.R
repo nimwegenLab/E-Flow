@@ -465,17 +465,18 @@ stats_var_summary <- function(.xs, .w, .xname, .trim) {
 }
 
 propagate_index_info <- function(.pls, .info) {
-  # propagate_index_info joins each dataframes included in the .pls list (output
-  # of preproc_facs_plate) with .info, a dataframe describing experimental
-  # conditions, etc (must have a column `dir` and either `well` or `discard`; 
-  # beware the fact that all other columns are appended to facs data, so better
-  # keep only relevant ones).
-  # in case where .info has a `well` column (1 row per well expected),
-  # inner_join() guaranties that wells that are not found in .info are discarded
-  # from all .pls dataframes.
-  # in case where .info has a `discard` column (1 row per plate expected), it
-  # is parsed (using , and ; to split) and corresponding wells are filtered out
-  # from all .pls dataframes.
+# propagate_index_info joins each dataframes included in the .pls list (output
+# of preproc_facs_plate) with .info, a dataframe describing experimental
+# conditions, etc (must have a column `dir` and either `well` or `discard`; 
+# beware the fact that all other columns are appended to facs data, so better
+# keep only relevant ones).
+# in case where .info has a `well` column (1 row per well expected),
+# inner_join() guaranties that wells that are not found in .info are discarded
+# from all .pls dataframes.
+# in case where .info has a `discard` column (1 row per plate expected), it
+# is parsed (using , and ; to split) and corresponding wells are filtered out
+# from all .pls dataframes.
+# NB: joining on factors is much faster than on char vectors
   
   if (!class(.pls)=='list') stop('propagate_index_info: first argument must be a list.')
   if (!class(.info)=='data.frame') stop('propagate_index_info: second argument must be a dataframe.')
@@ -483,39 +484,53 @@ propagate_index_info <- function(.pls, .info) {
   if (all(c('well', 'discard') %in% names(.info)))
     stop("propagate_index_info: second argument must be a dataframe with column `discard` or column `well`, not both.")
   
+  # uniformize factor levels
+  .dir_lv <- lapply(.pls, function(.df) dirname(levels(.df$path))) %>%
+    unlist %>% c(.info$dir) %>% unique
+  .info <- mutate(.info, dir=factor(as.character(dir), levels=.dir_lv))
+  
   # CASE: DISCARD WELLS
   if ('discard' %in% names(.info)) {
-    # join dataframes with all wells
-    .pls <- lapply(.pls, function(.df) {
-      .df %>% 
-        mutate(dir=dirname(as.character(path))) %>%
-        inner_join(.info, by="dir")
-    })
-    
-    # discard wells specified in .info
+    # format discard wells specified in .info
     .ws <- strsplit(.info$discard, split='[,;] *')
     .pl_discard <- .info %>%
-      select(dir, discard) %>%
+      select(dir, well=discard) %>%
       # split well column and create one line for each value
       slice(rep(1:dim(.info)[1], times=sapply(.ws, length))) %>%
-      mutate(discard=unlist(.ws))
+      mutate(well=unlist(.ws))
     
-    .pls <- lapply(.pls, function(.df)
+    .w_lv <- lapply(.pls, function(.df) levels(.df$well)) %>%
+      unlist %>% c(.pl_discard$well) %>% unique
+    .pl_discard <- mutate(.pl_discard, well=factor(as.character(well), levels=.w_lv))
+
+    # remove wells and join dataframes 
+    .pls <- lapply(.pls, function(.df) {
       .df %>% 
-        mutate(dir=dirname(as.character(path))) %>%
-        filter(!interaction(dir, well) %in% interaction(.pl_discard$dir, .pl_discard$discard)) )
+        mutate(dir=factor(dirname(as.character(path)), levels=.dir_lv),
+               well=factor(as.character(well), levels=.w_lv)) %>%
+        select(-path) %>%
+        # remove discard wells
+        mutate(well=factor(as.character(well), levels=.w_lv)) %>%
+        filter(!interaction(dir, well) %in% interaction(.pl_discard$dir, .pl_discard$well)) %>%
+        # propagate .info
+        left_join(.info, by="dir")
+    })
     return(.pls)
   }
   
   # CASE: SELECT WELLS
   if ('well' %in% names(.info))
     # join dataframes with well specified in .info only
+    .w_lv <- lapply(.pls, function(.df) levels(.df$well)) %>%
+      unlist %>% c(.info$well) %>% unique
+    .info <- mutate(.info, well=factor(as.character(well), levels=.w_lv))
+  
     lapply(.pls, function(.df) {
       .df %>% 
-        mutate(dir=dirname(as.character(path))) %>%
-        mutate(well=as.character(well)) %>%
-        inner_join(.info, by=c("dir", "well")) %>%
-        mutate(well=factor(well))
+        mutate(dir=factor(dirname(as.character(path)), levels=.dir_lv),
+               well=factor(as.character(well), levels=.w_lv)) %>%
+        left_join(.info, by=c("dir", "well")) #%>%
+#         mutate(well=factor(well))
     })
 }
 
