@@ -131,6 +131,8 @@ preproc_facs_plates <- function(.dirs, .data2preproc, .f_par, .f_utils, .plot=TR
                                 .verbose=0,                # console output (0: silent, 1: minimalist, 2: detailled)
                                 .write_format=NULL,        # formats in which to write subseted data to .out_dir (vector of strings in 'fcs', 'tab' or both)
                                 .min_cells=5000,           # number of cells to select for each sample
+                                .prop_cells=NULL,          # proportion of cells to select for each sample (overriden by .min_cells)
+                                .keep=NULL,
                                 .pdf_dim=c(2, 2.4, 6, 8),  # control plots dimensions (width, height, #rows, #columns)
                                 .cache_namer=(function(.d) file.path(.d, paste0(basename(.d), '_preproc.Rdata'))),
                                 .drop_preproc=FALSE,       # flag to return a list without the preproc facs data (faster merging for large datasets)
@@ -142,7 +144,7 @@ preproc_facs_plates <- function(.dirs, .data2preproc, .f_par, .f_utils, .plot=TR
     .preproc_dir <- .data2preproc(.dir)
     .pls_l <- mapply(function(.x1, .x2) c(.x1, list(.x2)), .pls_l, 
                      preproc_facs_plate(.dir, .preproc_dir, .f_par, .f_utils,
-                                        .plot, .verbose, .write_format, .min_cells, .pdf_dim, .cache_namer, .force),
+                                        .plot, .verbose, .write_format, .min_cells, .prop_cells, .keep, .pdf_dim, .cache_namer, .force),
                      SIMPLIFY = FALSE)
     .dt <- format(Sys.time() - .t0)
     if (.verbose>1) cat('Elapsed time is ', .dt, '\n')
@@ -156,7 +158,7 @@ preproc_facs_plates <- function(.dirs, .data2preproc, .f_par, .f_utils, .plot=TR
 }
 
 preproc_facs_plate <- function(.dir, .out_dir, .f_par, .f_utils, 
-                               .plot, .verbose, .write_format, .min_cells, .pdf_dim, .cache_namer, .force) {
+                               .plot, .verbose, .write_format, .min_cells, .prop_cells, .keep, .pdf_dim, .cache_namer, .force) {
   # preproc_facs_plate loads .fcs files in .dir as a flowSet, apply FSC/SSC gating to select .min_cells
   # subsequently this subset is filtered on channel fl1 to remove background (using a normal + uniform mixture model)
   # optionnaly OD files can be loaded in order to append od values to the statistics
@@ -232,7 +234,7 @@ preproc_facs_plate <- function(.dir, .out_dir, .f_par, .f_utils,
     if (class(.od) == "try-error") .od <- NA # set OD to NA otherwise
     plot.name <- sprintf("%d: %s", .file, keyword(.ff, "ORIGINALGUID"))
     
-    .spl <- preproc_facs_sample_secondary(.ff, .out_dir, .ch, .f_par, .od, .min_cells, 
+    .spl <- preproc_facs_sample_secondary(.ff, .out_dir, .ch, .f_par, .od, .min_cells, .prop_cells, .keep,
                                           .write_format, .plot, plot.name)
     .gates <- rbind(.gates, .spl$gate)
     .preproc <- rbind(.preproc, .spl$preproc)
@@ -248,11 +250,11 @@ preproc_facs_plate <- function(.dir, .out_dir, .f_par, .f_utils,
   return(.pl)
 }
 
-preproc_facs_sample_secondary <- function(.ff, .out_dir, .ch, .f_par, .od=NA, .min_cells=5000, 
+preproc_facs_sample_secondary <- function(.ff, .out_dir, .ch, .f_par, .od=NA, .min_cells=5000, .prop_cells, .keep,
                                           .write_format=NULL, .plot=TRUE, plot.name ) {
   # preproc_facs_sample_secondary performs gating and filtering operation that cannot be handled in flowSets
   # it is primarily used by preproc_facs_plate and is not intended to be called directly.
-  .g <- gate_fsc_ssc(.ff, .ch['fsc'], .ch['ssc'], .min_cells, .write_format)
+  .g <- gate_fsc_ssc(.ff, .ch['fsc'], .ch['ssc'], .min_cells, .prop_cells, .keep)
   
   # writes gated values to file(s) using format(s) given in .write (values in NULL, "tab", "fcs") 
   if ('tab' %in% .write_format)
@@ -295,7 +297,7 @@ preproc_facs_sample_secondary <- function(.ff, .out_dir, .ch, .f_par, .od=NA, .m
   return(list(gate=.gate, preproc=.ff_preproc, stats=.ff_stats))
 }
 
-find_densest_area <- function(.xy, .prop, n.bins=300) {
+find_densest_area <- function(.xy, .prop, .keep=NULL, n.bins=300) {
   # given a set of points (.x, .y), find_densest_area returns the coordinates of the polygon that 
   # includes .prop of all points in the densest region of the (.x, .y) space:
   # 1. compute the 2D density of points using the KernSmooth library on a n.bins x n.bins lattice
@@ -320,15 +322,34 @@ find_densest_area <- function(.xy, .prop, n.bins=300) {
   .level <- .dens$fhat[.ord][.level.idx]
   .contours <- contourLines(.dens$x1, .dens$x2, .dens$fhat, levels=.level)
   # contour(.dens$x1, .dens$x2, .dens$fhat, levels=.level)
-  .n_points <- lapply(.contours, function(.c) length(.c$x))
-  .idx <- which.max(.n_points)
-  if (length(.contours) > 1)
-    warning('contour with multiple regions; gate created from the largest one.')
+  .idx <- 1
+  if (length(.contours) > 1) { 
+    .horiz <- lapply(.contours, function(.c) mean(.c$x))
+    .vert <- lapply(.contours, function(.c) mean(.c$y))
+    .n_points <- lapply(.contours, function(.c) length(.c$x))
+    if (is.null(.keep)) .keep <- ''
+    if (.keep == 'bottom') {
+      .idx <- which.min(.vert)
+      warning('contour with multiple regions; gate created from the bottom one.')
+    } else if (.keep == 'top') {
+      .idx <- which.max(.vert)
+      warning('contour with multiple regions; gate created from the top one.')
+    } else if (.keep == 'left') {
+      .idx <- which.min(.horiz)
+      warning('contour with multiple regions; gate created from the left one.')
+    } else if (.keep == 'right') {
+      .idx <- which.max(.horiz)
+      warning('contour with multiple regions; gate created from the right one.')
+    } else { 
+      .idx <- which.max(.n_points)
+      warning('contour with multiple regions; gate created from the largest one.')
+    }
+  }
   .polyg <- matrix(c(.contours[[.idx]]$x, .contours[[.idx]]$y), ncol=2)
   return(.polyg)
 }
 
-gate_fsc_ssc <- function(.ff, .fsc_ch, .ssc_ch, .min_cells=5000, .write_format='tab') {
+gate_fsc_ssc <- function(.ff, .fsc_ch, .ssc_ch, .min_cells=5000, .prop_cells=NULL, .keep) {
   # gate_fsc_ssc applies a gate selecting .min_cells in the densest area of the (.fsc, .ssc) 
   # space, using a bivariate normal interpolation of the data (norm2Filter). 
   # scale.factor sets the gate area (in stdev-like units); more precisely,
@@ -337,21 +358,35 @@ gate_fsc_ssc <- function(.ff, .fsc_ch, .ssc_ch, .min_cells=5000, .write_format='
   # order to include a fraction p of the density in the gate, d must follow
   # d^2 = -2 ln(1-p).
   # n is number of events used to calculate the bivariate normal.
-  .n_cells <- dim(.ff)[1]
+  .n_cells <- dim(.ff)[1]   
+  if (is.null(.prop_cells))
+    .prop_cells <- .min_cells / .n_cells
+  if (!is.null(.min_cells))
+    if (.prop_cells < .min_cells / .n_cells)
+      .prop_cells <- .min_cells / .n_cells
   
-  if(.n_cells > .min_cells) {
-    .polyg <- find_densest_area(exprs(.ff[, c(.fsc_ch, .ssc_ch)]), .prop=.min_cells / .n_cells)
+  if(.prop_cells >= 1) {
+    .ff_s <- .ff
+    .polyg <- NULL
+  } else {
+    .polyg <- find_densest_area(exprs(.ff[, c(.fsc_ch, .ssc_ch)]), .prop=.prop_cells, .keep)
     colnames(.polyg) <- c(colnames(.ff)[.fsc_ch], colnames(.ff)[.ssc_ch]) # required for gating
     poly.gate <- polygonGate(filterId="similar.cells", .gate=.polyg)
     .ff_s <- Subset(.ff, poly.gate)
     colnames(.polyg) <- c('fsc', 'ssc') # convenient for export
-    if (dim(.ff_s)[1] < .8*.min_cells) { # unsuccessful gating
-      .ff_s <- .ff
-      .polyg <- NULL
+    if (dim(.ff_s)[1]/.n_cells < .8*.prop_cells) { # unsuccessful gating: try again
+      .new_prop <- .prop_cells * .prop_cells / (dim(.ff_s)[1]/.n_cells)
+      .polyg <- find_densest_area(exprs(.ff[, c(.fsc_ch, .ssc_ch)]), .prop=.new_prop, .keep)
+      colnames(.polyg) <- c(colnames(.ff)[.fsc_ch], colnames(.ff)[.ssc_ch]) # required for gating
+      poly.gate <- polygonGate(filterId="similar.cells", .gate=.polyg)
+      .ff_s <- Subset(.ff, poly.gate)
+      colnames(.polyg) <- c('fsc', 'ssc') # convenient for export
+      
+      if (dim(.ff_s)[1]/.n_cells < .8*.prop_cells) { # really unsuccessful gating
+        .ff_s <- .ff
+        .polyg <- NULL
+      }
     }
-  } else {
-    .ff_s <- .ff
-    .polyg <- NULL
   }  
   return(list(gate=.polyg, ff=.ff_s))
 }
