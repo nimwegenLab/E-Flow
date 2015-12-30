@@ -23,10 +23,13 @@ flowViz.par.set(theme =  trellis.par.get(), reset = TRUE)
 
 # ggplot2 config
 theme_set(theme_bw())
-scale_colour_discrete <- function(...) scale_colour_brewer(..., palette="Set1")
+scale_colour_discrete <- function(...) scale_colour_brewer(..., palette="Set1", na.value='gray50')
+scale_fill_discrete <- function(...) scale_fill_brewer(..., palette="Set1", na.value='gray50')
 # to revert to the default ggplot2 discrete colour scale, use: + ggplot2::scale_colour_discrete()
 scale_colour_periodic_brewer <-
-  function(...) scale_colour_manual(..., values = rep(c(brewer.pal(4, 'Set1'), 'gray42'), 100))
+  function(...) scale_colour_manual(..., values = rep(c(brewer.pal(4, 'Set1'), 'gray42'), 1000), na.value='gray25')
+scale_fill_periodic_brewer <- function(...) 
+  scale_fill_manual(..., values = rep(c(brewer.pal(4, 'Set1'), 'gray42'), 1000), na.value='gray25')
 scale_shape_periodic <- 
   function(...) scale_shape_manual(..., values = rep(15:18, 5))
 
