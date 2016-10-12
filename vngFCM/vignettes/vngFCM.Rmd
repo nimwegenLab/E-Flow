@@ -1,3 +1,14 @@
+---
+title: "Preprocessing of FCM data using vngFCM"
+author: "Luca Galbusera"
+date: "`r Sys.Date()`"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{vngFCM}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
 This package has been designed to preprocess FCM data by removing non viable cells, subtracting autofluorescence and reduce the effect of electronic noise coming from the measurement machine.
 
 #Installing the package
@@ -18,9 +29,6 @@ The package depends from
 * Rcpp
 
 Optionally it takes advantage of *doParallel*,  if present, to parallelize the merging of all the results of the analysis in a single final data frame.
-
-##Examples
-In the folder example you can find a working source and data to show you how to use the package.
 
 #How does the preprocessing work
 ##Remove the debris

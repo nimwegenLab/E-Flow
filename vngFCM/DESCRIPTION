@@ -1,0 +1,25 @@
+Package: vngFCM
+Type: Package
+Title: A filtering for FlowCytometric data
+Version: 0.1.0
+Authors@R: person("Luca", "Galbusera", email = "luca.galbusera@unibas.ch", role = c("aut", "cre"))
+Description: It preprocesses the data from FlowCytometric measurements. For
+    every file outputted from a FCM device, it filters out non viable cells by
+    discarding cells which are outlier in the scattering plot and it extracts the
+    mean and variance of the remaining population through a log-normal fit mixed
+    with a uniform distribution. It finally removes the autofluorescence and the
+    shot noise introduced by the measuring device.
+License: What license is it under?
+LazyData: TRUE
+Imports:
+    dplyr,
+    tidyr,
+    flowCore,
+    Rcpp
+Suggests:
+    doParallel,
+    knitr,
+    rmarkdown
+RoxygenNote: 5.0.1
+LinkingTo: Rcpp, RcppEigen
+VignetteBuilder: knitr
