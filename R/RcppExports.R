@@ -29,6 +29,6 @@
 #'
 #' @export
 EM_Luca <- function(y_, mu_, w_, list_sigma_, delta_, verbose_) {
-    .Call('vngFCM_EM_Luca', PACKAGE = 'vngFCM', y_, mu_, w_, list_sigma_, delta_, verbose_)
+    .Call('_vngFCM_EM_Luca', PACKAGE = 'vngFCM', y_, mu_, w_, list_sigma_, delta_, verbose_)
 }
 

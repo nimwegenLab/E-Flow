@@ -15,7 +15,8 @@ Imports:
     dplyr,
     tidyr,
     flowCore,
-    Rcpp
+    Rcpp,
+    foreach
 Suggests:
     doParallel,
     knitr,
