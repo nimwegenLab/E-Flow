@@ -1,9 +1,9 @@
 # Fluocytometer analysis of bacterial cells
 
-##Purpose of the package
+## Purpose of the package
 This package has been designed to preprocess FCM data by removing non viable cells, subtracting autofluorescence and reduce the effect of electronic noise coming from the measurement machine.
 
-##Installing the package
+## Installing the package
 As for any R package, just download the source folder and install it using the command
 ```
 install.packages("/path/to/vngFCM", repos=NULL, type="source")
@@ -19,21 +19,21 @@ The package depends from
 
 Optionally it takes advantage of *doParallel*,  if present, to parallelize the merging of all the results of the analysis in a single final data frame.
 
-##Examples
+## Examples
 In the folder example you can find a working source and data to show you how to use the package.
 
-##Brief theoretical introduction
-###Remove the debris (optional)
+## Brief theoretical introduction
+### Remove the debris (optional)
 Although in the companion paper we have shown that for bacterial cells is difficult to separate good and bad data points, the algorithm offers the possibility to filter the particles based on their scattering profile. The idea is that viable cells must share similar geometrical properties and hence their scattering profile should be similar. We thus identify debris as cells which appear as outliers in the scattering profile of the population. 
 
 Every signal measured by the FACS machine is just an electrical signal that creates an analog impulse in some detectors. This impulse is then represented by a number by considering the value of the highest point, the area under the curve of the impulse or the width of the impulse. Of these, only the width and the height are independent and since a priori for the scattering we don't have any reason to privilege one or the other, we consider both of them.
 
 In the end, the scattering profile is measured by four signals, two coming from the forward scattering (height and width) and the corresponding two from the side scattering. To identify outliers, we perform a 4D mixture of a Gaussian (representing the main cloud of scattering points from viable cells) and a uniform distribution (representing the outliers). The mixture gives us the posterior probability for each cell to come from the gaussian or from the uniform and we discard all the cells whose posterior is lower than a threshold that has to be set by the user (e.g. 0.5).
 
-###Extract mean and variance
+### Extract mean and variance
 To extract the mean and variance of the fluorescence from the cell population, we showed in the companion paper that the height is the most informative component. The distribution of fluorescence is fit in the logarithmic space with a mixture of a uniform and a normal distribution. Once we have the mean and variance from the normal fit, we can compute the mean and variance in the linear space.
 
-###Remove autofluorescence and noise from the device
+### Remove autofluorescence and noise from the device
 The means and variances are corrupted by the autofluorescence of the cells and by noise introduced by the electronics of the measuring apparatus. We remove the autofluorescence by subtracting the mean and variance of empty plasmids; if in the experiment there are more empty plasmids, we merge their means and variances as explained in the companion paper.
 
 The electronic noise is modeled as shot noise with an offset $O$
@@ -44,8 +44,8 @@ The amplitude $\delta^2$ and the offset $O$ are machine dependent and must be se
 Notice that the shift $O$ affects also the observed autofluorescence. In the companion paper we show that for this reason $O$ simplifies from the equations once we provide the observed values of non-expressing cells.
 
 
-##Setting up the environment
-###Setting the location where to store the final preprocessed files
+## Setting up the environment
+### Setting the location where to store the final preprocessed files
 Before starting the preprocessing of the files, we need to setup the environment.
 First of all, we need to create a function that takes as argument the name of the directory containing the FCM files and outputs the name of the directory where to store the preprocessed files. We can choose to store the preprocessed files in the same directory of the FCM files; in this case the function would be
 ```
@@ -56,7 +56,7 @@ Or we can decide to store the preprocessed files in a different directory; for e
 data2preproc <- function(.d) sub('data_facs', 'data_facs_preproc', .d) 
 ```
 
-###Setting the parameters of the preprocessing algorithm
+### Setting the parameters of the preprocessing algorithm
 The preprocessing algorithm depends on some parameters that must be set manually. For this we need to create a list of parameters of 
 the form
 ```
@@ -84,7 +84,7 @@ The meaning of the fields are
 To check if the names of the channels are correct and corresponds to measurements in the fcs files, you can use the function *check.channels*.
 
 
-###Using an external file to hold information about the directories
+### Using an external file to hold information about the directories
 We suggest to use an external file to store information about directories. For example you can have a CSV file with a list of directories containing the files to be analysed and for every directory stores optional comments which are ignored by the preprocessing algorithm, but can be useful to provide a description of the directory. For example we can have a file that looks like
 
 ```
@@ -113,10 +113,10 @@ pl_info <- pl_index %>% select(dir, antibiotic, date, author)
 
 Please notice that the structure of the file is arbitrary and it can be adapted to the user needs. But be aware that if at the end you want to merge this information with the final output of the algorithm, you need the field \empth{dir}.
 
-##Preprocessing step
+## Preprocessing step
 The filtering on the scattering is the most intensive part and it requires quite long time to be executed. To increase the speed, the process has been parallelized using an array job. To do this the package needs to send the preprocessing script to each node in a cluster and thus this script cannot be inside the package. The external file must be placed somewhere in the local file system and its location must be provided later on when we will call the main preprocessing function.
 
-###Starting the preprocessing
+### Starting the preprocessing
 To start the preprocessing it is enough to call the function 
 ```
 analyse_raw(.dirs, 
@@ -154,7 +154,7 @@ Preproc is a list containing different fields
 
 Notice that to reduce the size, the user can choose to discard the *preproc* field by passing *.drop_preproc=TRUE* when calling the function.
 
-###Add additional information
+### Add additional information
 Now you may want to add additional information to the statistics, for example the date, author and antibiotic used. If the information applies to whole directories, the easiest way to do this is to use the function \emph{propagate_index_info} which merges the information with the output of the algorithm by matching the column \emph{dir}. In our example we have dates, antbiotic and author stored in the tibble \emph{pl_info} and their values are the same inside a specific director; we merge them using
 ```
 # Info we want to merge
@@ -170,8 +170,8 @@ Information which doesn't apply globally to whole directories must be inserted b
 preproc <- preproc %>% extract_('path', 'promoter', '[0-9]/([[:alpha:]]+)_[A-Z]')
 ```
 
-##Autofluorescence and noise correction
-###Autofluorescence removal
+## Autofluorescence and noise correction
+### Autofluorescence removal
 Now we can start analysing the autofluorescence by looking at the fluorescence of non-expressing cells. In our example, these cells are the ones with the promoter *puA139* and we have two different dates. The algorithm allows to merge the fluorescence from different wells and dates as explained in the companion paper. The function to merge them is *get_autofluo_stats* and takes as arguments a vector of means and a vector of variances to merge.
 ```
 autofluo <- preproc$stats %>% filter(promoter=='puA139') %>% do((function(.df){
@@ -190,7 +190,7 @@ preproc$stats <- preproc.all$stats %>% mutate(autofluo_mean = autofluo$autofluo_
                                               autofluo_var.err = autofluo$autofluo_var.err)
 ```
 
-###Shot noise removal
+### Shot noise removal
 At this point we have all we need to remove the autofluorescence and the shot noise. Please verify that in the output of the algorithm, in our example *preproc*, there are the following fields
 
 * *fl_mean_lin, fl_mean_lin.err*: the mean fluorescence and its error in linear space (i.e. not in log space).
