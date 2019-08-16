@@ -1,7 +1,8 @@
 # Fluocytometer analysis of bacterial cells
 
 ## Purpose of the package
-This package has been designed to preprocess FCM data by removing non viable cells, subtracting autofluorescence and reduce the effect of electronic noise coming from the measurement machine.
+This package has been designed to preprocess FCM data by removing non viable cells, subtracting autofluorescence and reduce the effect of electronic noise coming from the cytometer. 
+It has been designed for the analysis of bacterial cells, where the small dimensions, the low expression and the asymettric shape pose challanges in the correct interpretation of the data.
 
 ## Installing the package
 As for any R package, just download the source folder and install it using the command
