@@ -144,6 +144,7 @@ return(data.frame(hess_mu=sum(hess_mu), hess_s=sum(hess_s)))
                                     fl_var=.fl_var, fl_var.err=.fl_var.err, 
                                     fl_mean_lin=.fl_mean_lin, fl_mean_lin.err=.fl_mean_lin.err, 
                                     fl_var_lin=.fl_var_lin, fl_var_lin.err = .fl_var_lin.err),
+                                    scattering_threshold = .scattering_threshold, scattering_frac_cells=.scattering_frac_cells,
                    preproc=data.frame(path=.path, well=.well, data.frame(X[data.use,]), post_fluo=EM.data.gfp$post[,1])
 )
 

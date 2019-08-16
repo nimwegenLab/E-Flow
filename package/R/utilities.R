@@ -8,13 +8,12 @@
 #'be analyzed. This function is useful to check whether the specified channels
 #'match the ones in the FCM files.
 #'
-#'@inheritParams preproc_facs_plates
 #'@export
 check.channels <- function(.dirs, .f_par){
   for (.dir in .dirs) {
     .fs <- flowCore::read.flowSet(path=.dir, full.names=TRUE, pattern=.f_par$file_pattern, phenoData=list(Filename="$FIL", Time="$BTIM"))
-    .fs <- .fs[, .f_par$channels]
-    cat("\nColumns selected to analyze\n[order should be: fsc, ssc, fl1]:", colnames(.fs), sep="\n")
+    .fs <- .fs[[1]]@exprs[, f_par$channels]
+    cat("\n", .dir, "Columns:", colnames(.fs), sep=" - ")
   }
 }
 
@@ -112,7 +111,7 @@ propagate_index_info <- function(.pls, .info) {
   #.dir_lv <- .pls$tmp %>% c(.info$dir) %>% unique
   .info <- mutate(.info, dir = as.character(dir))
   .pls <- left_join(.info, .pls, by = c(dir = "tmp"))
-  return(.pls)
+  return(as_data_frame(.pls))
 }
 
 

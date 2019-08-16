@@ -5,49 +5,7 @@
 \title{Filtering of FCM files based on their scattering profile.}
 \usage{
 scattering_filter(.dirs, .data2preproc, .f_par, .filter_preproc_namer,
-  .preproc_script, .jobs_cmd_name, .verbose)
-}
-\arguments{
-\item{.dirs}{List of directories containing the files to be preprocessed.}
-
-\item{.data2preproc}{Function that transforms the directory name of the FCM
-files to the directory name where to store preprocessed data.}
-
-\item{.f_par}{List containing the parameters used to preprocess the data. It
-must contain the elements \enumerate{ \item \emph{channels}: the names of
-the channels containing the signals to be analysed, in the order: forward
-scattering first signal, forward scattering second signal, side scattering
-first signal, side scattering second signal, fluorescence. \item
-\emph{scattering_threshold}: a cell is considered viable if its probability
-to come from the main scattering distribution is bigger or equal to this
-threshold. \item \emph{scattering_frac_cells}: retain only the fraction
-\emph{scattering_frac_cells} of cells with the highest poterior distribution; this is
-a way to specify a specific number of cells to retain from the filtering. If
-\emph{scattering_threshold} is specified, \emph{scattering_frac_cells} will
-be ignored. \item \emph{file_pattern}: the pattern fo the FCM files to be
-analysed. Useful if the directories contain files that must not be analysed.
-\item \emph{delta_shot_noise}: the amplitude of the shot noise. 
-\item \emph{delta_shot_noise_err}: the error associated to the shot noise. It can be zero\item
-\emph{autofluo}: Tibble containing for every dir information about the autofluorescence to be subtracted. 
-These are, in order: mean, error of the mean, standard deviation, error of the standard deviation. 
-These can be computed with the function get_autofluo_stats()}}
-
-\item{.filter_preproc_namer}{Function that takes the directory name where to
-store the preprocessed files and returns the name and path of a Rdata file
-where to store the preprocessed data of the single files. By default, if
-\emph{path} is the directory of the preprocessed data and the file is called
-abc.fcs, then the preprocessed data for that file is stored in
-\emph{path/abc.Rdata}.}
-
-\item{.preproc_script}{Name of the script that perform the filtering of the
-scattering signals and the lognormal fit of the fluorescence. Deafult to
-\emph{preproc.R}.}
-
-\item{.jobs_cmd_name}{Name of the file where to store the list of commands to
-send to the cluster. Default to \emph{filtering_cmd}}
-
-\item{.verbose}{Should some information about the several stages the function
-goes through be displayed? Default to FALSE}
+  .preproc_script, .jobs_cmd_name, .force)
 }
 \value{
 The function doesn't return any value, but it saves the statistics of

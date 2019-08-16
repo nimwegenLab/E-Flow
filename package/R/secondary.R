@@ -29,7 +29,6 @@
 #'  doParallel is present and this function is called through
 #'  \code{preproc_facs_plates} then the parallel environment is automatically
 #'  set to half of the available cores.
-#'@inheritParams preproc_facs_plates
 #'@return A list containing \enumerate{ \item \emph{stats} the summary
 #'  statistics of all the FCM analized. \item \emph{preproc} the preprocessed
 #'  data, i.e., raw scattering and fluorescence values of the cells which
@@ -38,26 +37,24 @@
 #'  specified by \code{.cache_namer} in the folder \code{.out_dir} so that it
 #'  can be restored later if required. Also the function writes the statistiscs
 #'  in a CSV file.
-
-remove_noise <- function(.dir, .out_dir, .f_par, .plot, .verbose, .pdf_dim, .cache_namer, .filter_preproc_namer,
-                               .drop_raw, .use_doParallel, .force)
+collect_dir <- function(.dir, .out_dir, .plot, .pdf_dim, .cache_namer, .f_par, .filter_preproc_namer, .drop_raw, .use_doParallel, .force)
 {
-  if (.verbose) cat("\nCurrent directory:", .dir, "\n")
-
+  cat("\nCurrent directory:", .dir, "\n")
+  
   # Check if the analysis has already been performed and saved. If so and .force==FALSE, load the saved analysis
   if (file.exists(.cache_namer(.out_dir)) && !.force) {
     load(.cache_namer(.out_dir)) # load objet .pl
-    if (.verbose) cat("Cache loaded from ", basename(.cache_namer(.out_dir)), "\n", sep='')
+    cat("Cache loaded from ", basename(.cache_namer(.out_dir)), "\n", sep='')
     return (.pl)
   }
   
   # Delete any previous saved analysis
   if(file.exists(.cache_namer(.out_dir)))
     file.remove(.cache_namer(.out_dir))
-
+  
   # Create the directory where to store cached files
   dir.create(.out_dir, recursive=TRUE, showWarnings=FALSE)
-
+  
   if(.plot) {
     pdf(file = file.path(.out_dir, paste0(basename(.out_dir), '_plots.pdf')), height=.pdf_dim[2]*.pdf_dim[3], width=.pdf_dim[1]*.pdf_dim[4])
     par(mfrow=c(.pdf_dim[3],.pdf_dim[4]))
@@ -65,14 +62,14 @@ remove_noise <- function(.dir, .out_dir, .f_par, .plot, .verbose, .pdf_dim, .cac
         mgp=c(1.5, .5, 0),
         tcl=-0.25)
   }
-
+  
   # Load the filtered data.
   # Get the fcs files to be analysed
   .files <- file.path(.out_dir, .filter_preproc_namer(list.files(.dir, pattern = .f_par$file_pattern, full.names = FALSE)))
   # Load all the Rdata files
   .preproc <- data.frame()
   .stats <- data.frame()
-
+  
   if(.use_doParallel){
     .pp <- foreach::foreach(f=.files) %dopar% {
       load(f)
@@ -94,21 +91,21 @@ remove_noise <- function(.dir, .out_dir, .f_par, .plot, .verbose, .pdf_dim, .cac
       rm(.gfp_stats)
       return(list(preproc=.tmp1, stats=.tmp2))
     }
-  .stats <- do.call(rbind, lapply(1:length(.pp), function(i) .pp[[i]]$stats))
-  .preproc <- do.call(rbind, lapply(1:length(.pp), function(i) .pp[[i]]$preproc))
+    .stats <- do.call(rbind, lapply(1:length(.pp), function(i) .pp[[i]]$stats))
+    .preproc <- do.call(rbind, lapply(1:length(.pp), function(i) .pp[[i]]$preproc))
   }else{
     for(f in .files){
       load(f)
-
+      
       #Keep preproc or not?
       if(.drop_raw) .tmp1 <- NULL
       else .tmp1 <- .gfp_stats$preproc
-
+      
       ##Get the summary statistics
       .tmp2 <- .gfp_stats$stats
       .stats <- rbind(.stats, .tmp2)
       .preproc <- rbind(.preproc, .tmp1)
-
+      
       ##If required, plot the histogram on the pdf file
       if(.plot){
         hist(log(.gfp_stats$preproc$GFP.H), breaks='fd', main=basename(f), prob=TRUE, xlab='Mean log fluo - A.U.', ylab='Density')
@@ -117,71 +114,21 @@ remove_noise <- function(.dir, .out_dir, .f_par, .plot, .verbose, .pdf_dim, .cac
               y=.gfp_stats$stats$w*dnorm(.x, .gfp_stats$stats$fl_mean, sqrt(.gfp_stats$stats$fl_var)) + 
                 (1-.gfp_stats$stats$w) * dunif(.x, min(.x), max(.x)))
       }
-
+      
       ##Remove the loaded data
       rm(.gfp_stats)
     }
   }
   if(.plot) dev.off()
   
-  #New autofluo removal: estimate it separately and using MARA script
-  if('autofluo' %in% names(.f_par)){
-    .autofluo_info <- dplyr::filter(.f_par$autofluo, dir==.dir)$autofluo
-    .autofluo_mean <- as.numeric(unlist(strsplit(.autofluo_info, ',')))[1]
-    .autofluo_mean.err <- as.numeric(unlist(strsplit(.autofluo_info, ',')))[2]
-    .autofluo_var <- as.numeric(unlist(strsplit(.autofluo_info, ',')))[3]
-    .autofluo_var.err <- as.numeric(unlist(strsplit(.autofluo_info, ',')))[4]
-    
-    .stats <- .stats %>% 
-      mutate(fl_mean_lin_autofluo_rm = fl_mean_lin-.autofluo_mean, 
-             fl_mean_lin_autofluo_rm.err = sqrt(fl_mean_lin.err^2 + .autofluo_mean.err^2),
-             fl_var_lin_autofluo_rm = fl_var_lin-.autofluo_var,
-             fl_var_lin_autofluo_rm.err = sqrt(fl_var_lin.err^2+.autofluo_var.err^2),
-             fl_var_lin_noise_rm = fl_var_lin_autofluo_rm-.f_par$delta_shot_noise**2*fl_mean_lin_autofluo_rm,
-             fl_var_lin_noise_rm.err = sqrt(fl_var_lin_autofluo_rm.err^2 + 
-                                              (2*.f_par$delta_shot_noise*fl_mean_lin_autofluo_rm*.f_par$delta_shot_noise_err)^2 + 
-                                              (.f_par$delta_shot_noise**2*fl_mean_lin_autofluo_rm.err)^2))
-  }
-  else{
-    print('Autofluorescence information not supplied')
-  }
-  
-  #Old autofluo removal: estimate mean and var autolfuo by well provided and removing outliers based on IQR
-  # Get info about autofluo.
-  # Check if autofluo wells are provided in the f_par, otherwise skip the shot noise removal
-  # .autofluo_info <- dplyr::filter(.f_par$autofluo_wells, dir==.dir)$empty
-  # if(length(.autofluo_info)==0 || any(is.na(.autofluo_info))){
-  #   print("No autofluo information. Shot noise will not be removed")
-  #   .pl <- list(preproc=.preproc, stats=.stats, method='luca')
-  #   save(.pl, file=.cache_namer(.out_dir))
-  #   write.csv (.stats, file=file.path(.out_dir, paste0(basename(.out_dir), '_stats.csv')))
-  #   .autofluo <- data.frame(mean_mu=0, sd_mu=0, mean_var=0, sd_var=0)
-  #   return(.pl)
-  # }
-  # 
-  
-  # .autofluo_wells <- unlist(strsplit(.autofluo_info, ','))
-  # .autofluo <- dplyr::filter(.stats, well %in% .autofluo_wells) %>% group_by() %>%
-  #   summarize(mean_mu=mean(fl_mean_lin), sd_mu=sd(fl_mean_lin),
-  #             mean_var=mean(fl_var_lin), sd_var=sd(fl_var_lin))
-  # 
-  # # Remove shot noise and autofluo in real space
-  # if(.plot) pdf(file = file.path(.out_dir, paste0(basename(.out_dir), '_autofluo.pdf')))
-  # .stats <- remove_autofluo(.stats, .autofluo_wells, .plot)
-  # if(.plot) dev.off()
-  # .fl_var_lin_noise_rm <- .stats$fl_var_lin-.autofluo$mean_var-.f_par$delta_shot_noise**2*.stats$fl_mean_lin_autofluo_rm
-  # 
-  #.stats <- .stats %>% mutate(fl_var_lin_noise_rm=.fl_var_lin_noise_rm)
-
   ### SAVE THE RESULTS ###
   # Write the final result to a directory
-  .pl <- list(preproc=.preproc, stats=.stats, method='luca')
+  .pl <- list(preproc=.preproc, stats=.stats, method='vngFCM')
   save(.pl, file=.cache_namer(.out_dir))
   write.csv (.stats, file=file.path(.out_dir, paste0(basename(.out_dir), '_stats.csv')))
-
+  
   return(.pl)
 }
-
 
 #'Filtering of FCM files based on their scattering profile.
 #'
@@ -201,13 +148,12 @@ remove_noise <- function(.dir, .out_dir, .f_par, .plot, .verbose, .pdf_dim, .cac
 #'to execute an array job which is sent to the cluster. IMPORTANT: dirnames must
 #'be given as absolute paths or as relative the current working directory.
 #'
-#'@inheritParams preproc_facs_plates
 #'
 #'@return The function doesn't return any value, but it saves the statistics of
 #'  the filtered data in Rdata files in the folder \code{.data2preproc} with the
 #'  name given by \code{.filter_preproc_name}.
 
-scattering_filter <- function(.dirs, .data2preproc, .f_par, .filter_preproc_namer, .preproc_script, .jobs_cmd_name, .verbose)
+scattering_filter <- function(.dirs, .data2preproc, .f_par, .filter_preproc_namer, .preproc_script, .jobs_cmd_name, .force)
 {
   # List of commands to send to the cluster, in SIMD mode. Each line is a different file to be processed
   .cmds <- c()
@@ -228,7 +174,7 @@ scattering_filter <- function(.dirs, .data2preproc, .f_par, .filter_preproc_name
     # Determine how the file containing the RData of the analyzed fcs file is called
     .out_file <- .filter_preproc_namer(.data2preproc(.f))
     # If the file exist and the reanalisys is not forced, then current file doesn't need to be processed
-    if(file.exists(.out_file)) next
+    if(file.exists(.out_file) & !.force) next
     # Otherwhise we have to process it, so put it in the list of commands to be sent to the cluster
     .cmds <- c(.cmds, sprintf("Rscript %s --file %s --fsc1 %s --fsc2 %s --ssc1 %s --ssc2 %s --gfp %s --threshold %f --scattering_frac_cells %f --out %s",
                               .preproc_script, .f,
@@ -245,10 +191,10 @@ scattering_filter <- function(.dirs, .data2preproc, .f_par, .filter_preproc_name
     write.table(.cmds, file=.jobs_cmd_name, append = FALSE, row.names = FALSE, col.names = FALSE, quote=FALSE)
     create_job_script(length(.cmds), .jobs_cmd_name)
     system("sbatch job.sh")
-    stop("The cluster is processing the files. Please restart the function when the job is done.")
+    cat("The cluster is processing the files.\n")
   }
   else{
-    if(.verbose) cat("All the data have already been filtered\n")
+    cat("All the data have already been filtered\n")
   }
 }
 
@@ -268,38 +214,38 @@ scattering_filter <- function(.dirs, .data2preproc, .f_par, .filter_preproc_name
 #'
 #'@return The function returns the dataframe .stats with the additional fields fl_mean_lin_autofluo_rm and fl_mean_lin_autofluo_rm.err containing the fluorescence and its 
 #'error in linear space with the autofluorescence removed. It also adds the fields autofluo_mean_lin and autofluo_mean_lin.err which contain the estimated autofluorescence and its error in linear space.
-remove_autofluo <- function(.stats, .empty_wells, .plot=FALSE){
-  #Plot the empty wells
-  if(.plot){
-    print(
-      ggplot(.stats %>% filter(well %in% .empty_wells), aes(well, fl_mean)) + geom_point()  + 
-        geom_errorbar(aes(ymin=fl_mean-fl_mean.err, ymax=fl_mean+fl_mean.err))+ ggtitle("Empty wells")
-    )
-  }
-  
-  #For each replicate keep only the wells inside the IQR range. 
-  .stats_empty <- .stats %>% filter(well %in% .empty_wells) %>% do((function(.df){
-    .q1 <- quantile(.df$fl_mean, 0.25)
-    .q3 <- quantile(.df$fl_mean, 0.75)
-    .iqr <- .q3 - .q1
-    .good <- (.df$fl_mean >= (.q1 - 0.75*.iqr)) & (.$fl_mean <= (.q3 + 0.75*.iqr))
-    return(data.frame(.df, good=.good))
-  })(.))
-  
-  if(.plot)
-    print(
-      ggplot(.stats_empty, aes(well, fl_mean, col=good)) + geom_point() + 
-        geom_errorbar(aes(ymin=fl_mean-fl_mean.err, ymax=fl_mean+fl_mean.err)) +  
-        ggtitle("Filter out outliers based on IQR of the means")
-    )
-  
-  .summary_empty <- .stats_empty %>% filter(good) %>% mutate(w_lin=1/fl_mean_lin.err^2) %>% 
-    summarize(autofluo_mean_lin=sum(fl_mean_lin*w_lin)/sum(w_lin), autofluo_mean_lin.err=sqrt(1/sum(w_lin)))
-  
-  #Subtract the autofluo
-  .stats_autofluo_rm <- .stats %>% 
-    mutate(fl_mean_lin_autofluo_rm = fl_mean_lin-.summary_empty$autofluo_mean_lin, 
-           fl_mean_lin_autofluo_rm.err = sqrt(fl_mean_lin.err^2 + .summary_empty$autofluo_mean_lin.err^2))
-  
-  return(as_data_frame(.stats_autofluo_rm))
-}
+# remove_autofluo <- function(.stats, .empty_wells, .plot=FALSE){
+#   #Plot the empty wells
+#   if(.plot){
+#     print(
+#       ggplot(.stats %>% filter(well %in% .empty_wells), aes(well, fl_mean)) + geom_point()  + 
+#         geom_errorbar(aes(ymin=fl_mean-fl_mean.err, ymax=fl_mean+fl_mean.err))+ ggtitle("Empty wells")
+#     )
+#   }
+#   
+#   #For each replicate keep only the wells inside the IQR range. 
+#   .stats_empty <- .stats %>% filter(well %in% .empty_wells) %>% do((function(.df){
+#     .q1 <- quantile(.df$fl_mean, 0.25)
+#     .q3 <- quantile(.df$fl_mean, 0.75)
+#     .iqr <- .q3 - .q1
+#     .good <- (.df$fl_mean >= (.q1 - 0.75*.iqr)) & (.$fl_mean <= (.q3 + 0.75*.iqr))
+#     return(data.frame(.df, good=.good))
+#   })(.))
+#   
+#   if(.plot)
+#     print(
+#       ggplot(.stats_empty, aes(well, fl_mean, col=good)) + geom_point() + 
+#         geom_errorbar(aes(ymin=fl_mean-fl_mean.err, ymax=fl_mean+fl_mean.err)) +  
+#         ggtitle("Filter out outliers based on IQR of the means")
+#     )
+#   
+#   .summary_empty <- .stats_empty %>% filter(good) %>% mutate(w_lin=1/fl_mean_lin.err^2) %>% 
+#     summarize(autofluo_mean_lin=sum(fl_mean_lin*w_lin)/sum(w_lin), autofluo_mean_lin.err=sqrt(1/sum(w_lin)))
+#   
+#   #Subtract the autofluo
+#   .stats_autofluo_rm <- .stats %>% 
+#     mutate(fl_mean_lin_autofluo_rm = fl_mean_lin-.summary_empty$autofluo_mean_lin, 
+#            fl_mean_lin_autofluo_rm.err = sqrt(fl_mean_lin.err^2 + .summary_empty$autofluo_mean_lin.err^2))
+#   
+#   return(as_data_frame(.stats_autofluo_rm))
+# }
