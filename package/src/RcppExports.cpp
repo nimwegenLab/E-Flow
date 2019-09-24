@@ -6,9 +6,9 @@
 
 using namespace Rcpp;
 
-// EM_Luca
-SEXP EM_Luca(SEXP y_, SEXP mu_, SEXP w_, SEXP list_sigma_, SEXP delta_, SEXP verbose_);
-RcppExport SEXP _vngFCM_EM_Luca(SEXP y_SEXP, SEXP mu_SEXP, SEXP w_SEXP, SEXP list_sigma_SEXP, SEXP delta_SEXP, SEXP verbose_SEXP) {
+// EM_mixture
+SEXP EM_mixture(SEXP y_, SEXP mu_, SEXP w_, SEXP list_sigma_, SEXP delta_, SEXP verbose_);
+RcppExport SEXP _EFlow_EM_mixture(SEXP y_SEXP, SEXP mu_SEXP, SEXP w_SEXP, SEXP list_sigma_SEXP, SEXP delta_SEXP, SEXP verbose_SEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -18,17 +18,17 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< SEXP >::type list_sigma_(list_sigma_SEXP);
     Rcpp::traits::input_parameter< SEXP >::type delta_(delta_SEXP);
     Rcpp::traits::input_parameter< SEXP >::type verbose_(verbose_SEXP);
-    rcpp_result_gen = Rcpp::wrap(EM_Luca(y_, mu_, w_, list_sigma_, delta_, verbose_));
+    rcpp_result_gen = Rcpp::wrap(EM_mixture(y_, mu_, w_, list_sigma_, delta_, verbose_));
     return rcpp_result_gen;
 END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_vngFCM_EM_Luca", (DL_FUNC) &_vngFCM_EM_Luca, 6},
+    {"_EFlow_EM_mixture", (DL_FUNC) &_EFlow_EM_mixture, 6},
     {NULL, NULL, 0}
 };
 
-RcppExport void R_init_vngFCM(DllInfo *dll) {
+RcppExport void R_init_EFlow(DllInfo *dll) {
     R_registerRoutines(dll, NULL, CallEntries, NULL, NULL);
     R_useDynamicSymbols(dll, FALSE);
 }

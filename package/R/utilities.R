@@ -62,7 +62,8 @@ create_job_script <- function(.num_jobs, .cmd_file){
   suppressWarnings(dir.create(file.path(getwd(), 'qlog')))
 
   #Create the text of the job
-  .text <- sprintf("#!/bin/bash
+  .text <- sprintf(
+"#!/bin/bash
 #SBATCH --job-name=FCM
 #SBATCH --time=00:30:00
 #SBATCH --qos=30min
@@ -71,7 +72,6 @@ create_job_script <- function(.num_jobs, .cmd_file){
 #SBATCH --error=%s
 
 ## here is the important flag for array jobs
-## 50 is the number of lines in your cmds file. To get this number just 'wc -l commands.cmd'
 #SBATCH --array=1-%i
 
 # load your required modules
@@ -107,11 +107,11 @@ eval $SEED
 #'   information.
 #' @export
 propagate_index_info <- function(.pls, .info) {
-  .pls <- mutate(.pls, tmp = dirname(as.character(path)))
-  #.dir_lv <- .pls$tmp %>% c(.info$dir) %>% unique
-  .info <- mutate(.info, dir = as.character(dir))
-  .pls <- left_join(.info, .pls, by = c(dir = "tmp"))
-  return(as_data_frame(.pls))
+  # .pls <- mutate(.pls, tmp = dirname(as.character(path)))
+  # .info <- mutate(.info, dir = as.character(dir))
+  # .pls <- left_join(.info, .pls, by = c(dir = "tmp"))
+  # return(as_data_frame(.pls))
+  return(left_join(.pls, .info, by='dir'))
 }
 
 

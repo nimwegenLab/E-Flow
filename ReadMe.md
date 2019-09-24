@@ -17,6 +17,8 @@ The package depends from
 * tidyr
 * flowCore
 * Rcpp
+* foreach
+* optparse
 
 Optionally it takes advantage of *doParallel*,  if present, to parallelize the merging of all the results of the analysis in a single final data frame.
 

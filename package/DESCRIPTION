@@ -1,6 +1,6 @@
-Package: vngFCM
+Package: EFlow
 Type: Package
-Title: A filtering for FlowCytometric data
+Title: A filtering for FlowCytometric bacterial data
 Version: 0.1.0
 Authors@R: person("Luca", "Galbusera", email = "luca.galbusera@unibas.ch", role = c("aut", "cre"))
 Description: It preprocesses the data from FlowCytometric measurements. For
@@ -16,12 +16,14 @@ Imports:
     tidyr,
     flowCore,
     Rcpp,
-    maxLik
+    maxLik,
+    foreach,
+    RcppEigen,
+    doParallel
 Suggests:
-    doParallel,
     knitr,
     rmarkdown
-RoxygenNote: 6.1.0
+RoxygenNote: 6.1.1
 LinkingTo: Rcpp, RcppEigen
 VignetteBuilder: knitr
 Encoding: UTF-8

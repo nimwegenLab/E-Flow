@@ -61,7 +61,7 @@ const double tol = 1e-10; //tollerance (difference in likelihood to stop the em)
 //'
 //' @export
 // [[Rcpp::export]]
-SEXP EM_Luca(SEXP y_, SEXP mu_, SEXP w_, SEXP list_sigma_, SEXP delta_, SEXP verbose_){
+SEXP EM_mixture(SEXP y_, SEXP mu_, SEXP w_, SEXP list_sigma_, SEXP delta_, SEXP verbose_){
   //Map R ojects to Eigen
   Map<MatrixXd> y  (as<Map<MatrixXd> >(y_));
   Map<MatrixXd> mu (as<Map<MatrixXd> >(mu_));  //means of each component by column

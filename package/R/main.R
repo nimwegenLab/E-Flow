@@ -130,8 +130,8 @@ collect_raw <- function(.dirs, .data2preproc,
   if(.use_doParallel)
     foreach::registerDoSEQ()
   
-  .pls$stats <- as_data_frame(.pls$stats)
-  .pls$preproc <- as_data_frame(.pls$preproc)
+  .pls$stats <- as_tibble(.pls$stats)
+  .pls$preproc <- as_tibble(.pls$preproc)
   return(.pls)
 }
 

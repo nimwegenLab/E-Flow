@@ -1,4 +1,4 @@
 #Always remember to end the file with an empty line!
-dir;empty;cip;date
-./data_gwendoline/20160122_Cip_induction/20160122_Cip0;F4,F5;0;20160122
-./data_gwendoline/20160122_Cip_induction/20160122_Cip2;F4,F5;2;20160122
+dir;empty;condition;date
+./data/Condition0;F4,F5;0;20160122
+./data/Condition1;F4,F5;1;20160122

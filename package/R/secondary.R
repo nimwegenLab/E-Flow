@@ -91,8 +91,8 @@ collect_dir <- function(.dir, .out_dir, .plot, .pdf_dim, .cache_namer, .f_par, .
       rm(.gfp_stats)
       return(list(preproc=.tmp1, stats=.tmp2))
     }
-    .stats <- do.call(rbind, lapply(1:length(.pp), function(i) .pp[[i]]$stats))
-    .preproc <- do.call(rbind, lapply(1:length(.pp), function(i) .pp[[i]]$preproc))
+    .stats <- do.call(bind_rows, lapply(1:length(.pp), function(i) .pp[[i]]$stats))
+    .preproc <- do.call(bind_rows, lapply(1:length(.pp), function(i) .pp[[i]]$preproc))
   }else{
     for(f in .files){
       load(f)
@@ -123,7 +123,7 @@ collect_dir <- function(.dir, .out_dir, .plot, .pdf_dim, .cache_namer, .f_par, .
   
   ### SAVE THE RESULTS ###
   # Write the final result to a directory
-  .pl <- list(preproc=.preproc, stats=.stats, method='vngFCM')
+  .pl <- list(preproc=.preproc %>% mutate(dir=.dir), stats=.stats %>% mutate(dir=.dir), method='EFlow')
   save(.pl, file=.cache_namer(.out_dir))
   write.csv (.stats, file=file.path(.out_dir, paste0(basename(.out_dir), '_stats.csv')))
   
@@ -156,7 +156,7 @@ collect_dir <- function(.dir, .out_dir, .plot, .pdf_dim, .cache_namer, .f_par, .
 scattering_filter <- function(.dirs, .data2preproc, .f_par, .filter_preproc_namer, .preproc_script, .jobs_cmd_name, .force)
 {
   # List of commands to send to the cluster, in SIMD mode. Each line is a different file to be processed
-  .cmds <- c()
+  .cmds <- data.frame()
 
   # List all the fcs files that have to be analyzed
   .files <- do.call(list.files, list(path=.dirs, pattern=.f_par$file_pattern, full.names=TRUE, recursive=TRUE))
@@ -176,76 +176,29 @@ scattering_filter <- function(.dirs, .data2preproc, .f_par, .filter_preproc_name
     # If the file exist and the reanalisys is not forced, then current file doesn't need to be processed
     if(file.exists(.out_file) & !.force) next
     # Otherwhise we have to process it, so put it in the list of commands to be sent to the cluster
-    .cmds <- c(.cmds, sprintf("Rscript %s --file %s --fsc1 %s --fsc2 %s --ssc1 %s --ssc2 %s --gfp %s --threshold %f --scattering_frac_cells %f --out %s",
-                              .preproc_script, .f,
-                              .f_par$channels[1], .f_par$channels[2], .f_par$channels[3], .f_par$channels[4], .f_par$channels[5],
-                              .f_par$scattering_threshold, .f_par$scattering_frac_cells, .out_file))
+    .cmds <- bind_rows(.cmds,
+                       data.frame(fsc1=.f_par$channels[1], fsc2=.f_par$channels[2], 
+                                  ssc1=.f_par$channels[3], ssc2=.f_par$channels[4],
+                                  gfp=.f_par$channels[5], 
+                                  threshold=.f_par$scattering_threshold, scattering_frac_cells=.f_par$scattering_frac_cells,
+                                  out=.out_file, file=.f,
+                                  stringsAsFactors = FALSE))
+      
+      # c(.cmds, sprintf("Rscript %s --file %s --fsc1 %s --fsc2 %s --ssc1 %s --ssc2 %s --gfp %s --threshold %f --scattering_frac_cells %f --out %s",
+      #                         .preproc_script, .f,
+      #                         .f_par$channels[1], .f_par$channels[2], .f_par$channels[3], .f_par$channels[4], .f_par$channels[5],
+      #                         .f_par$scattering_threshold, .f_par$scattering_frac_cells, .out_file))
     # If the directory for the outputfile doesn't exist, we also have to create it
     dir.create(dirname(.out_file), showWarnings = FALSE, recursive = TRUE)
   }
-
+  .cmds <- .cmds %>% as_tibble()
+  
   # If some files need to be filtered, then write the list of files to be processed on a cmd file and send the instructions to the clustes
   # (I think it is quick to store the cmd in the var cmds and then write them all at once to the command file)
-  if(length(.cmds)){
-    # Write the parameter file that wil be read by the filtering script
-    write.table(.cmds, file=.jobs_cmd_name, append = FALSE, row.names = FALSE, col.names = FALSE, quote=FALSE)
-    create_job_script(length(.cmds), .jobs_cmd_name)
-    system("sbatch job.sh")
-    cat("The cluster is processing the files.\n")
+  if(nrow(.cmds)){
+    .cmds %>% rowwise() %>% do(data.frame(preproc(.)))
   }
   else{
     cat("All the data have already been filtered\n")
   }
 }
-
-
-#'Remove autofluorescence
-#'
-#'\code{remove_autofluo} removes the autofluorescence from the FCS measurements. 
-#'It does that by considering the fluorescene of empty plasmids. If more than one empty plasmid is 
-#'provided, the values are first filtered to remove outliers (every point which is more than 
-#'q3+0.75IQR or less than q1-0.75IQR, where q1 and q3 are the first and third quartiles and IQRis the interquartile range). The survival points are collapsed together to 
-#'get a single estimate of the autofluorescence and its error.
-#'If only one empty well is given, the removal of outliers is skipped.
-#'
-#'@Params .stats A dataframe containing the summary statistics of the fluorescence measurements. In particular it contains the fields well, fl_mean and fl_mean_lin.err
-#'@Params .empty_wells A vector of characters cotaining the names of the wells with empty promoters.
-#'@Params .plot Should diagnostic plots be made?
-#'
-#'@return The function returns the dataframe .stats with the additional fields fl_mean_lin_autofluo_rm and fl_mean_lin_autofluo_rm.err containing the fluorescence and its 
-#'error in linear space with the autofluorescence removed. It also adds the fields autofluo_mean_lin and autofluo_mean_lin.err which contain the estimated autofluorescence and its error in linear space.
-# remove_autofluo <- function(.stats, .empty_wells, .plot=FALSE){
-#   #Plot the empty wells
-#   if(.plot){
-#     print(
-#       ggplot(.stats %>% filter(well %in% .empty_wells), aes(well, fl_mean)) + geom_point()  + 
-#         geom_errorbar(aes(ymin=fl_mean-fl_mean.err, ymax=fl_mean+fl_mean.err))+ ggtitle("Empty wells")
-#     )
-#   }
-#   
-#   #For each replicate keep only the wells inside the IQR range. 
-#   .stats_empty <- .stats %>% filter(well %in% .empty_wells) %>% do((function(.df){
-#     .q1 <- quantile(.df$fl_mean, 0.25)
-#     .q3 <- quantile(.df$fl_mean, 0.75)
-#     .iqr <- .q3 - .q1
-#     .good <- (.df$fl_mean >= (.q1 - 0.75*.iqr)) & (.$fl_mean <= (.q3 + 0.75*.iqr))
-#     return(data.frame(.df, good=.good))
-#   })(.))
-#   
-#   if(.plot)
-#     print(
-#       ggplot(.stats_empty, aes(well, fl_mean, col=good)) + geom_point() + 
-#         geom_errorbar(aes(ymin=fl_mean-fl_mean.err, ymax=fl_mean+fl_mean.err)) +  
-#         ggtitle("Filter out outliers based on IQR of the means")
-#     )
-#   
-#   .summary_empty <- .stats_empty %>% filter(good) %>% mutate(w_lin=1/fl_mean_lin.err^2) %>% 
-#     summarize(autofluo_mean_lin=sum(fl_mean_lin*w_lin)/sum(w_lin), autofluo_mean_lin.err=sqrt(1/sum(w_lin)))
-#   
-#   #Subtract the autofluo
-#   .stats_autofluo_rm <- .stats %>% 
-#     mutate(fl_mean_lin_autofluo_rm = fl_mean_lin-.summary_empty$autofluo_mean_lin, 
-#            fl_mean_lin_autofluo_rm.err = sqrt(fl_mean_lin.err^2 + .summary_empty$autofluo_mean_lin.err^2))
-#   
-#   return(as_data_frame(.stats_autofluo_rm))
-# }
