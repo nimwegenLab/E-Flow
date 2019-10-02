@@ -75,14 +75,13 @@ analyse_raw <- function(.dirs, .data2preproc,
                         .filter_preproc_namer=(function(.d) sub("fcs$", 'RData', .d)),
                         .f_par,
                         .force = FALSE,
-                        .preproc_script='preproc.R',
-                        .jobs_cmd_name='filtering_cmd') {
+                        .preproc_func='None') {
   
   ## The first thing to do is to filter all the datasets based on their scattering profile.
   ## This step requires some time, so I parallelize it through an array job and I store the results in Rdata files named acording to .filter_preproc_name
   ##in the preproc directory specified by .data2preproc
   cat("Filtering and log normal fitting the fcs files\n")
-  scattering_filter(.dirs, .data2preproc, .f_par, .filter_preproc_namer, .preproc_script, .jobs_cmd_name, .force)
+  scattering_filter(.dirs, .data2preproc, .f_par, .filter_preproc_namer, .preproc_func, .force)
 
   # Now I loop over all the directories/plate. I load the info of the filtered files and I remove the autofluorescence and the shot noise
   if(!requireNamespace("doParallel", quietly = TRUE))
@@ -92,7 +91,7 @@ analyse_raw <- function(.dirs, .data2preproc,
 
 #'@export
 collect_raw <- function(.dirs, .data2preproc,
-                        .cache_namer=(function(.d) file.path(.d, paste0(basename(.d), '_preproc_vngFCM.Rdata'))),
+                        .cache_namer=(function(.d) file.path(.d, paste0(basename(.d), '_preproc_EFlow.Rdata'))),
                         .filter_preproc_namer=(function(.d) sub("fcs$", 'RData', .d)),
                         .f_par,
                         .force=FALSE,

@@ -153,7 +153,7 @@ collect_dir <- function(.dir, .out_dir, .plot, .pdf_dim, .cache_namer, .f_par, .
 #'  the filtered data in Rdata files in the folder \code{.data2preproc} with the
 #'  name given by \code{.filter_preproc_name}.
 
-scattering_filter <- function(.dirs, .data2preproc, .f_par, .filter_preproc_namer, .preproc_script, .jobs_cmd_name, .force)
+scattering_filter <- function(.dirs, .data2preproc, .f_par, .filter_preproc_namer, .preproc_func, .force)
 {
   # List of commands to send to the cluster, in SIMD mode. Each line is a different file to be processed
   .cmds <- data.frame()
@@ -196,7 +196,8 @@ scattering_filter <- function(.dirs, .data2preproc, .f_par, .filter_preproc_name
   # If some files need to be filtered, then write the list of files to be processed on a cmd file and send the instructions to the clustes
   # (I think it is quick to store the cmd in the var cmds and then write them all at once to the command file)
   if(nrow(.cmds)){
-    .cmds %>% rowwise() %>% do(data.frame(preproc(.)))
+    if(.preproc_func=='None') .preproc_func <- preproc
+    .cmds %>% ungroup() %>% mutate(tmp = seq(n())) %>% split(.$tmp) %>% future_map_dfr(preproc, .progress = TRUE)
   }
   else{
     cat("All the data have already been filtered\n")
