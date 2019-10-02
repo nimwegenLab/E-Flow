@@ -107,11 +107,7 @@ eval $SEED
 #'   information.
 #' @export
 propagate_index_info <- function(.pls, .info) {
-  # .pls <- mutate(.pls, tmp = dirname(as.character(path)))
-  # .info <- mutate(.info, dir = as.character(dir))
-  # .pls <- left_join(.info, .pls, by = c(dir = "tmp"))
-  # return(as_data_frame(.pls))
-  return(left_join(.pls, .info, by='dir'))
+  left_join(.pls %>% mutate(dir = dirname(path)), .info, by='dir') %>% select(-dir)
 }
 
 

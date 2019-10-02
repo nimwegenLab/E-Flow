@@ -37,97 +37,46 @@
 #'  specified by \code{.cache_namer} in the folder \code{.out_dir} so that it
 #'  can be restored later if required. Also the function writes the statistiscs
 #'  in a CSV file.
-collect_dir <- function(.dir, .out_dir, .plot, .pdf_dim, .cache_namer, .f_par, .filter_preproc_namer, .drop_raw, .use_doParallel, .force)
+make_distribution_plots_dir <- function(.out_dir, .pdf_dim)
 {
-  cat("\nCurrent directory:", .dir, "\n")
-  
-  # Check if the analysis has already been performed and saved. If so and .force==FALSE, load the saved analysis
-  if (file.exists(.cache_namer(.out_dir)) && !.force) {
-    load(.cache_namer(.out_dir)) # load objet .pl
-    cat("Cache loaded from ", basename(.cache_namer(.out_dir)), "\n", sep='')
-    return (.pl)
-  }
-  
-  # Delete any previous saved analysis
-  if(file.exists(.cache_namer(.out_dir)))
-    file.remove(.cache_namer(.out_dir))
-  
-  # Create the directory where to store cached files
-  dir.create(.out_dir, recursive=TRUE, showWarnings=FALSE)
-  
-  if(.plot) {
-    pdf(file = file.path(.out_dir, paste0(basename(.out_dir), '_plots.pdf')), height=.pdf_dim[2]*.pdf_dim[3], width=.pdf_dim[1]*.pdf_dim[4])
-    par(mfrow=c(.pdf_dim[3],.pdf_dim[4]))
-    par(mar=c(5.5, 2.5, 2, .5) + 0.1,
-        mgp=c(1.5, .5, 0),
-        tcl=-0.25)
-  }
-  
-  # Load the filtered data.
   # Get the fcs files to be analysed
-  .files <- file.path(.out_dir, .filter_preproc_namer(list.files(.dir, pattern = .f_par$file_pattern, full.names = FALSE)))
-  # Load all the Rdata files
-  .preproc <- data.frame()
-  .stats <- data.frame()
+  .files <- list.files(.out_dir, '.RData', full.names = TRUE)
   
-  if(.use_doParallel){
-    .pp <- foreach::foreach(f=.files) %dopar% {
-      load(f)
-      if(.drop_raw)
-        .tmp1 <- NULL
-      else
-        .tmp1 <- .gfp_stats$preproc
-      .tmp2 <- .gfp_stats$stats
-      
-      ##If required, plot the histogram on the pdf file
-      if(.plot){
-        hist(log(.gfp_stats$preproc$GFP.H), breaks='fd', main=basename(f), prob=TRUE, xlab='Mean log fluo - A.U.', ylab='Density')
-        .x <- seq(min(log(.gfp_stats$preproc$GFP.H)), max(log(.gfp_stats$preproc$GFP.H)), length.out=100)
-        lines(.x, col='red', lwd=2,
-              y=.gfp_stats$stats$w*dnorm(.x, .gfp_stats$stats$fl_mean, sqrt(.gfp_stats$stats$fl_var)) + 
-                (1-.gfp_stats$stats$w) * dunif(.x, min(.x), max(.x)))
-      }
-      
-      rm(.gfp_stats)
-      return(list(preproc=.tmp1, stats=.tmp2))
-    }
-    .stats <- do.call(bind_rows, lapply(1:length(.pp), function(i) .pp[[i]]$stats))
-    .preproc <- do.call(bind_rows, lapply(1:length(.pp), function(i) .pp[[i]]$preproc))
-  }else{
-    for(f in .files){
-      load(f)
-      
-      #Keep preproc or not?
-      if(.drop_raw) .tmp1 <- NULL
-      else .tmp1 <- .gfp_stats$preproc
-      
-      ##Get the summary statistics
-      .tmp2 <- .gfp_stats$stats
-      .stats <- rbind(.stats, .tmp2)
-      .preproc <- rbind(.preproc, .tmp1)
-      
-      ##If required, plot the histogram on the pdf file
-      if(.plot){
-        hist(log(.gfp_stats$preproc$GFP.H), breaks='fd', main=basename(f), prob=TRUE, xlab='Mean log fluo - A.U.', ylab='Density')
-        .x <- seq(min(log(.gfp_stats$preproc$GFP.H)), max(log(.gfp_stats$preproc$GFP.H)), length.out=100)
-        lines(.x, col='red', lwd=2,
-              y=.gfp_stats$stats$w*dnorm(.x, .gfp_stats$stats$fl_mean, sqrt(.gfp_stats$stats$fl_var)) + 
-                (1-.gfp_stats$stats$w) * dunif(.x, min(.x), max(.x)))
-      }
-      
-      ##Remove the loaded data
-      rm(.gfp_stats)
-    }
-  }
-  if(.plot) dev.off()
+  # Load all the stats and preproc (df with scattering, fluo and posterior for the fluo) from Rdata files.
+  # Store them in a single df called .total
+  .preproc <- .files %>% purrr::map_dfr(function(.x){
+    load(.x)
+    return(.gfp_stats$preproc)
+  })
+  .stats <- .files %>% purrr::map_dfr(function(.x){
+    load(.x)
+    return(.gfp_stats$stats)
+  })
+  .total <- left_join(.preproc, .stats, by = c('path', 'well')) %>% mutate(base = basename(path))
   
-  ### SAVE THE RESULTS ###
-  # Write the final result to a directory
-  .pl <- list(preproc=.preproc %>% mutate(dir=.dir), stats=.stats %>% mutate(dir=.dir), method='EFlow')
-  save(.pl, file=.cache_namer(.out_dir))
-  write.csv (.stats, file=file.path(.out_dir, paste0(basename(.out_dir), '_stats.csv')))
+  # Remove unecessary df
+  rm(.stats, .preproc)
   
-  return(.pl)
+  #Create the fits lines
+  .fit <- .total %>% group_by(path, well) %>% summarise(MAX = max(log(GFP.H)), MIN = min(log(GFP.H)), mu = unique(fl_mean), s = unique(fl_var), w = unique(w)) %>% 
+    group_by_all %>% do(data.frame(x = seq(.$MIN, .$MAX, length.out = 100))) %>% 
+    mutate(y = w*dnorm(x, mu, sqrt(s)) + (1-w)/(MAX-MIN)) %>% mutate(base = basename(path))
+  
+  #Make the plots in a pdf
+  pdf(file = file.path(.out_dir, paste0(basename(.out_dir), '_plots.pdf')), height=.pdf_dim[2]*.pdf_dim[3], width=.pdf_dim[1]*.pdf_dim[4])
+  par(mfrow=c(.pdf_dim[3],.pdf_dim[4]))
+  par(mar=c(5.5, 2.5, 2, .5) + 0.1,
+      mgp=c(1.5, .5, 0),
+      tcl=-0.25)
+  
+  print(
+    ggplot() + 
+    geom_histogram(data = .total, aes(log(GFP.H), y=..density..), bins = 30) + 
+    geom_line(data = .fit, aes(x, y), col = 'red') + 
+    facet_wrap(base~well)
+  )
+  
+  dev.off()
 }
 
 #'Filtering of FCM files based on their scattering profile.
@@ -168,38 +117,22 @@ scattering_filter <- function(.dirs, .data2preproc, .f_par, .filter_preproc_name
     stop("Some of files to be processed do not exist. Check that the directories are given as absoulte paths or as relative to the current working directory", call.=TRUE)
   }
 
-  # For every file check if it has already been filtered, i.e. if the Rdata file specified by .filter_preproc_namer is present.
-  # If it is not present, add the command to filter the file to the .cmd_file file.
-  for(.f in .files ) {
-    # Determine how the file containing the RData of the analyzed fcs file is called
-    .out_file <- .filter_preproc_namer(.data2preproc(.f))
-    # If the file exist and the reanalisys is not forced, then current file doesn't need to be processed
-    if(file.exists(.out_file) & !.force) next
-    # Otherwhise we have to process it, so put it in the list of commands to be sent to the cluster
-    .cmds <- bind_rows(.cmds,
-                       data.frame(fsc1=.f_par$channels[1], fsc2=.f_par$channels[2], 
-                                  ssc1=.f_par$channels[3], ssc2=.f_par$channels[4],
-                                  gfp=.f_par$channels[5], 
-                                  threshold=.f_par$scattering_threshold, scattering_frac_cells=.f_par$scattering_frac_cells,
-                                  out=.out_file, file=.f,
-                                  stringsAsFactors = FALSE))
-      
-      # c(.cmds, sprintf("Rscript %s --file %s --fsc1 %s --fsc2 %s --ssc1 %s --ssc2 %s --gfp %s --threshold %f --scattering_frac_cells %f --out %s",
-      #                         .preproc_script, .f,
-      #                         .f_par$channels[1], .f_par$channels[2], .f_par$channels[3], .f_par$channels[4], .f_par$channels[5],
-      #                         .f_par$scattering_threshold, .f_par$scattering_frac_cells, .out_file))
-    # If the directory for the outputfile doesn't exist, we also have to create it
-    dir.create(dirname(.out_file), showWarnings = FALSE, recursive = TRUE)
-  }
-  .cmds <- .cmds %>% as_tibble()
+  .cmds <- tibble::enframe(.files, name = NULL, value='file') %>% mutate(
+    out = .filter_preproc_namer(.data2preproc(file)),
+    fsc1=.f_par$channels[1], fsc2=.f_par$channels[2], 
+    ssc1=.f_par$channels[3], ssc2=.f_par$channels[4],
+    gfp=.f_par$channels[5], 
+    force=.force,
+    threshold=.f_par$scattering_threshold, scattering_frac_cells=.f_par$scattering_frac_cells
+  )
   
-  # If some files need to be filtered, then write the list of files to be processed on a cmd file and send the instructions to the clustes
-  # (I think it is quick to store the cmd in the var cmds and then write them all at once to the command file)
-  if(nrow(.cmds)){
-    if(.preproc_func=='None') .preproc_func <- preproc
-    .cmds %>% ungroup() %>% mutate(tmp = seq(n())) %>% split(.$tmp) %>% future_map_dfr(preproc, .progress = TRUE)
-  }
-  else{
-    cat("All the data have already been filtered\n")
-  }
+  #Create the paths if they don't exist. I use purrr because creating a dir is quick, I don't want to parallelize it
+  .cmds %>% mutate(out_dir = dirname(out)) %>% group_by(out_dir) %>% summarise %>% 
+    rename(path = out_dir) %>% purrr::pmap(dir.create, showWarnings=FALSE, recursive=TRUE)
+  
+  #Filter the fcs files
+  if(is.null(.preproc_func)) .preproc_func <- preproc
+  .stats <- .cmds %>% ungroup() %>% mutate(tmp = seq(n())) %>% split(.$tmp) %>% future_map_dfr(preproc, .progress = TRUE) %>% as_tibble()
+  
+  return(.stats)
 }

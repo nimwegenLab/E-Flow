@@ -75,63 +75,21 @@ analyse_raw <- function(.dirs, .data2preproc,
                         .filter_preproc_namer=(function(.d) sub("fcs$", 'RData', .d)),
                         .f_par,
                         .force = FALSE,
-                        .preproc_func='None') {
+                        .preproc_func=NULL) {
   
   ## The first thing to do is to filter all the datasets based on their scattering profile.
   ## This step requires some time, so I parallelize it through an array job and I store the results in Rdata files named acording to .filter_preproc_name
   ##in the preproc directory specified by .data2preproc
   cat("Filtering and log normal fitting the fcs files\n")
-  scattering_filter(.dirs, .data2preproc, .f_par, .filter_preproc_namer, .preproc_func, .force)
+  stats <- scattering_filter(.dirs, .data2preproc, .f_par, .filter_preproc_namer, .preproc_func, .force)
 
-  # Now I loop over all the directories/plate. I load the info of the filtered files and I remove the autofluorescence and the shot noise
-  if(!requireNamespace("doParallel", quietly = TRUE))
-    .use_doParallel <- FALSE
+  return(stats)
 }
 
 
 #'@export
-collect_raw <- function(.dirs, .data2preproc,
-                        .cache_namer=(function(.d) file.path(.d, paste0(basename(.d), '_preproc_EFlow.Rdata'))),
-                        .filter_preproc_namer=(function(.d) sub("fcs$", 'RData', .d)),
-                        .f_par,
-                        .force=FALSE,
-                        .plot=TRUE,
-                        .pdf_dim=c(2, 2.4, 6, 8),
-                        .drop_raw=TRUE,       # flag to return a list without the preproc facs data (faster merging for large datasets)
-                        .use_doParallel=TRUE) {
-  #I loop over all the directories/plate. I load the info of the fitered files and I remove the autofluorescence and the shot noise
-  if(!requireNamespace("doParallel", quietly = TRUE))
-    .use_doParallel <- FALSE
-  
-  if (.use_doParallel){
-    cat(sprintf("Detected doParallel - Registering a local parallel backend with %i cores\n", parallel::detectCores()/2))
-    cl <- parallel::makeCluster(parallel::detectCores()/2)
-    doParallel::registerDoParallel(cl)
-  }
-  else{
-    cat("doParallel not detected or .use_doParallel set to false - Use sequential mode\n")
-  }
-  
-  .pls_l <- list(preproc=list(), stats=list(), method=list())
-  for (.dir in .dirs) {
-    .preproc_dir <- .data2preproc(.dir)
-    .pls_l <- mapply(function(.x1, .x2) c(.x1, list(.x2)), .pls_l,
-                     collect_dir(.dir, .preproc_dir, .plot, .pdf_dim, .cache_namer, .f_par, .filter_preproc_namer, .drop_raw, .use_doParallel, .force),
-                     SIMPLIFY = FALSE)
-  }
-  
-  # Merge the datasets from the single directories together
-  cat('\nMerging dataframes...\n')
-  .pls <- lapply(.pls_l, function(.single_df) do.call(rbind, .single_df) )
-  
-  
-  # Deregister the local parallel backend
-  if(.use_doParallel)
-    foreach::registerDoSEQ()
-  
-  .pls$stats <- as_tibble(.pls$stats)
-  .pls$preproc <- as_tibble(.pls$preproc)
-  return(.pls)
+make_distribution_plots <- function(.dirs, .data2preproc, .pdf_dim=c(2, 2.4, 6, 8)){
+  .data2preproc(.dirs) %>% purrr::map(make_distribution_plots_dir, .pdf_dim=.pdf_dim)
 }
 
 #'@export

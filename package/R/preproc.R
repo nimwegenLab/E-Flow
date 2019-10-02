@@ -21,8 +21,16 @@ preproc <- function(.params){
   .ssc2 <- .params$ssc2
   .gfph <- .params$gfp
   .out_file <- .params$out
+  .force <- .params$force
   .scattering_threshold <- .params$threshold
   .scattering_frac_cells <- .params$scattering_frac_cells
+  
+  #If the file already exists and I don't want to force the filtering, just load it and return it
+  if(file.exists(.out_file) & !.force){
+    print(paste("Loading from cache", .out_file))
+    load(.out_file)
+    return(.gfp_stats$stats)
+  }
   
   .ff <- read.FCS(.file)
   X = exprs(.ff)
@@ -109,14 +117,18 @@ preproc <- function(.params){
   
   
   ## Collect everything in a dataframe
-  .gfp_stats <- list(stats=data.frame(path=.path, well=.well, n=.n, w=EM.data.gfp$weight[1],
-                                      fl_mean=.fl_mean, fl_mean.err=.fl_mean.err, 
-                                      fl_var=.fl_var, fl_var.err=.fl_var.err, 
-                                      fl_mean_lin=.fl_mean_lin, fl_mean_lin.err=.fl_mean_lin.err, 
-                                      fl_var_lin=.fl_var_lin, fl_var_lin.err = .fl_var_lin.err),
-                                      scattering_threshold = .scattering_threshold, scattering_frac_cells=.scattering_frac_cells,
-                     preproc=data.frame(path=.path, well=.well, data.frame(X[data.use,]), post_fluo=EM.data.gfp$post[,1])
+  .gfp_stats <- list(
+    stats=data.frame(path=.path, well=.well, n=.n, w=EM.data.gfp$weight[1],
+                     fl_mean=.fl_mean, fl_mean.err=.fl_mean.err, 
+                     fl_var=.fl_var, fl_var.err=.fl_var.err, 
+                     fl_mean_lin=.fl_mean_lin, fl_mean_lin.err=.fl_mean_lin.err, 
+                     fl_var_lin=.fl_var_lin, fl_var_lin.err = .fl_var_lin.err, 
+                     scattering_threshold = .scattering_threshold, scattering_frac_cells=.scattering_frac_cells,
+                     stringsAsFactors = FALSE) %>% as_tibble(),
+    preproc=data.frame(path=.path, well=.well, data.frame(X[data.use,]), post_fluo=EM.data.gfp$post[,1], stringsAsFactors = FALSE) %>% as_tibble()
   )
   
   save(.gfp_stats, file=.out_file) 
+  
+  return(.gfp_stats$stats)
 }
