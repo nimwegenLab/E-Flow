@@ -131,8 +131,8 @@ scattering_filter <- function(.dirs, .data2preproc, .f_par, .filter_preproc_name
     rename(path = out_dir) %>% purrr::pmap(dir.create, showWarnings=FALSE, recursive=TRUE)
   
   #Filter the fcs files
-  if(is.null(.preproc_func)) .preproc_func <- preproc
-  .stats <- .cmds %>% ungroup() %>% mutate(tmp = seq(n())) %>% split(.$tmp) %>% future_map_dfr(preproc, .progress = TRUE) %>% as_tibble()
+  if(is.null(.preproc_func)) .preproc_func <- preproc_func
+  .stats <- .cmds %>% ungroup() %>% mutate(tmp = seq(n())) %>% split(.$tmp) %>% future_map_dfr(.preproc_func) %>% as_tibble()
   
   return(.stats)
 }

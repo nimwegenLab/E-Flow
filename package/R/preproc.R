@@ -13,7 +13,7 @@
 #'\item scattering_threshold, scattering_frac_cells: the threshold on the posterior or the fraction 
 #'of cells to retain. 
 #'}
-preproc <- function(.params){
+preproc_func <- function(.params){
   .file <- .params$file
   .fsc1 <- .params$fsc1
   .fsc2 <- .params$fsc2
@@ -32,8 +32,8 @@ preproc <- function(.params){
     return(.gfp_stats$stats)
   }
   
-  .ff <- read.FCS(.file)
-  X = exprs(.ff)
+  .ff <- flowCore::read.FCS(.file)
+  X = flowCore::exprs(.ff)
   ## Remove negative data
   positive <- which(apply(X, 1, function(.x) !any(.x<=0)))
   X <- X[positive, ]
@@ -73,8 +73,8 @@ preproc <- function(.params){
   
   
   ## Get info about flow frame
-  .path <- unlist(keyword(.ff,"FILENAME"), use.names=FALSE)
-  .well <- unlist(keyword(.ff,"TUBE NAME"), use.names=FALSE)
+  .path <- unlist(flowCore::keyword(.ff,"FILENAME"), use.names=FALSE)
+  .well <- unlist(flowCore::keyword(.ff,"TUBE NAME"), use.names=FALSE)
   ## Get number of cells after the filtering of the scattering
   .n <- length(data.use)
   ## Get mean and var from fluo lognormal fit
