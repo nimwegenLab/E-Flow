@@ -87,9 +87,9 @@ eval $SEED
 }
 
 
-##Clean any loaded dynamic library (e.g. EM_Luca)
+##Clean any loaded dynamic library
 .onUnload <- function (libpath) {
-  library.dynam.unload("vngFCM", libpath)
+  library.dynam.unload("EFlow", libpath)
 }
 
 

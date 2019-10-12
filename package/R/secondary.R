@@ -63,7 +63,7 @@ make_distribution_plots_dir <- function(.out_dir, .pdf_dim)
     mutate(y = w*dnorm(x, mu, sqrt(s)) + (1-w)/(MAX-MIN)) %>% mutate(base = basename(path))
   
   #Make the plots in a pdf
-  pdf(file = file.path(.out_dir, paste0(basename(.out_dir), '_plots.pdf')), height=.pdf_dim[2]*.pdf_dim[3], width=.pdf_dim[1]*.pdf_dim[4])
+  pdf(file = file.path(.out_dir, paste0(basename(.out_dir), '_plots.pdf')), height=.pdf_dim[2], width=.pdf_dim[1])
   par(mfrow=c(.pdf_dim[3],.pdf_dim[4]))
   par(mar=c(5.5, 2.5, 2, .5) + 0.1,
       mgp=c(1.5, .5, 0),

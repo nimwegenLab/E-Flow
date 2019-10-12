@@ -9,90 +9,62 @@ analyse_raw(.dirs, .data2preproc, .filter_preproc_namer = (function(.d)
   .preproc_func = NULL)
 }
 \arguments{
-\item{.dirs}{List of directories containing the files to be preprocessed.}
+\item{.dirs}{Character vector of directories containing the files to be processed.}
 
-\item{.data2preproc}{Function that transforms the directory name of the FCM
-files to the directory name where to store preprocessed data.}
+\item{.data2preproc}{Function that transforms the directory names of the FCM
+files to the directory names where to store the processed data. For example, if the files are in a directory
+called \emph{data/condition0/}, you want to store the processed data in \emph{data_processed/condition0/}. In 
+order to do that, you can set \code{data2preproc <- function(.d) sub('data', 'data_proc', .d)}}
 
 \item{.filter_preproc_namer}{Function that takes the directory name where to
-store the preprocessed files and returns the name and path of a Rdata file
-where to store the preprocessed data of the single files. By default, if
-\emph{path} is the directory of the preprocessed data and the file is called
-abc.fcs, then the preprocessed data for that file is stored in
+store the processed files and returns the name and path of a Rdata file
+where to store the processed data of the single FCM files. By default, if
+\emph{path} is the directory of the processed data and the file is called
+abc.fcs, then the processed data for that file is stored in
 \emph{path/abc.Rdata}.}
 
-\item{.f_par}{List containing the parameters used to preprocess the data. It
+\item{.f_par}{List containing the parameters used to process the FCM files. It
 must contain the elements \enumerate{ \item \emph{channels}: the names of
 the channels containing the signals to be analysed, in the order: forward
 scattering first signal, forward scattering second signal, side scattering
-first signal, side scattering second signal, fluorescence. \item
+first signal, side scattering second signal, fluorescence. Usually the first 
+signal is the height and the second one is the width. \item
 \emph{scattering_threshold}: a cell is considered viable if its probability
 to come from the main scattering distribution is bigger or equal to this
 threshold. \item \emph{scattering_frac_cells}: retain only the fraction
 \emph{scattering_frac_cells} of cells with the highest poterior distribution; this is
 a way to specify a specific number of cells to retain from the filtering. If
 \emph{scattering_threshold} is specified, \emph{scattering_frac_cells} will
-be ignored. \item \emph{file_pattern}: the pattern fo the FCM files to be
+be ignored. \item \emph{file_pattern}: the pattern of the FCM files to be
 analysed. Useful if the directories contain files that must not be analysed.
 \item \emph{delta_shot_noise}: the amplitude of the shot noise. 
-\item \emph{delta_shot_noise_err}: the error associated to the shot noise. It can be zero\item
-\emph{autofluo}: Tibble containing for every dir information about the autofluorescence to be subtracted. 
-These are, in order: mean, error of the mean, standard deviation, error of the standard deviation. 
-These can be computed with the function get_autofluo_stats()}}
+\item \emph{delta_shot_noise_err}: the error associated to the shot noise. It can be zero.}}
 
-\item{.cache_namer}{Function that takes the directory name where to store the
-preprocessed files and returns the name and path of a Rdata file where to
-store the preprocessed data of all the files in the directory. By default,
-if \emph{path} is the directory of the preprocessed data, the file is stored
-in \emph{path/path_preproc_luca.Rdata}.}
+\item{.force}{Forces the removal of the autofluorescence and of the shot noise, even if the FCM have already been 
+processed.}
 
-\item{.plot}{Should some plots summarizing the filtering be produced and
-stored to a pdf? Default to TRUE}
-
-\item{.force_noise_rm}{Forces the removal of the autofluorescence and of the shot noise}
-
-\item{.pdf_dim}{Dimensions of the pdf file where to print the plots: c(width,
-height, rows, columns)}
-
-\item{.verbose}{Should some information about the several stages the function
-goes through be displayed? Default to FALSE}
-
-\item{.drop_raw}{Should the raw scattering and fluorescence values of the
-cells which survived the scattering filter (i.e. viable cells) be dropped
-and only the summary statistics be returned? Dropping them can save space
-and make the algorithm faster. Default to TRUE.}
-
-\item{.preproc_script}{Name of the script that perform the filtering of the
-scattering signals and the lognormal fit of the fluorescence. Deafult to
-\emph{preproc.R}.}
-
-\item{.jobs_cmd_name}{Name of the file where to store the list of commands to
-send to the cluster. Default to \emph{filtering_cmd}}
-
-\item{.use_doParallel}{If TRUE take advantage of the package doParallel to
-spped up the code by exploiting half of the cores of the local machine. The
-filtering of the scattering profile is in any case sent to the cluster.}
+\item{.preproc_func}{Name of the function that performs the filtering of the
+scattering signals and the lognormal fit of the fluorescence. If NULL, the 
+default function is used.}
 }
 \value{
-A list containing \enumerate{ \item \emph{stats} the summary
- statistics of all the FCM analized. \item \emph{raw} the raw
- data, i.e., raw scattering and fluorescence values of the cells which
- survived the scattering filter. If \emph{.drop_raw} is FALSE, then this
- item is NULL.}
+A dataframe containing the summary
+ statistics of all the FCM analized \enumerate{\item \emph{n}: the number of cells after the scattering filtering.
+ \item \emph{fl_mean, fl_var, fl_mean.err, fl_var.err, fl_mean_lin, fl_mean_lin.err, fl_var_lin, fl_var_lin.err}: 
+ estimated means and variances of the populations of cells in log and real space, with their error.
+ \item \emph{scattering_threshold, scattering_frac_cells}: parameters used to perform the scattering filtering. They are
+ the ones passed to the function through the \emph{.f_par} structure}.
 }
 \description{
-\code{preproc_facs_plates} is the main function to preprocess a set of FCM
-files contained in several folders.
+\code{analyse_raw} reads all FCM files in a group of directories, filters them based on the scattering signals, and 
+returns the mean and variance of the populations of cells.
 }
 \details{
 This functions is the \emph{main function} that should be called to process
 FCM data. It takes all the FCM files in a set of folders and applies the
-filtering in the scattering space to remove non viable cells; it fits a
+filtering in the scattering space to remove non viable cells. Then it fits a
 mixture of a lognormal and a uniform distribution to extract the mean and
-variance from the fluorescence of the remaining population; it removes the
-autofluorescence and the shot noise. The scattering filtering and the
-fluorescence fit are performed parallel as an array job. Moreover if the
-package \emph{doParallel} is present, the code is further parallelized
-exploiting half of the cores available on the local machine, as further
-explained in the documentation of \code{preproc_facs_plate}.
+variance from the fluorescence of the remaining population. Notice that to speed up the 
+processing, the function \emph{plan} from the package \emph{future} can be called
+just before this function.
 }

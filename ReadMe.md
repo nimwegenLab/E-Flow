@@ -7,7 +7,7 @@ It has been designed for the analysis of bacterial cells, where the small dimens
 ## Installing the package
 As for any R package, just download the source folder and install it using the command
 ```
-install.packages("/path/to/vngFCM", repos=NULL, type="source")
+install.packages("/path/to/E-Flow", repos=NULL, type="source")
 ```
 Please notice that in order to compile the C++ sources GSL is required. 
 
@@ -41,7 +41,7 @@ The means and variances are corrupted by the autofluorescence of the cells and b
 The electronic noise is modeled as shot noise with an offset $O$
 $$I_m = I_t + A_T\sqrt{I_T+A_T}+ O \epsilon(0;\delta^2)$$
 where $I_m$ is the measured signal, $I_t$ is the true signal not contaminated by the shot noise,and $epsilon$ is a random gaussian variable of mean 0 and variance $\delta^2$. $A_T$ is the true autofluorescence signal, which the algorithm infers looking at the fluorescence of non-expressing cells.
-The amplitude $\delta^2$ and the offset $O$ are machine dependent and must be set manually by the user. We have estimated them using artificial beads and we found that for our machine $\delta=12.7\pm 0.6$ and $O=97/pm 29$.
+The amplitude $\delta^2$ and the offset $O$ are machine dependent and must be set manually by the user. We have estimated them using artificial beads and we found that for our machine $\delta=12.7\pm 0.6$ and $O=97\pm 29$.
 
 Notice that the shift $O$ affects also the observed autofluorescence. In the companion paper we show that for this reason $O$ simplifies from the equations once we provide the observed values of non-expressing cells.
 
@@ -103,13 +103,13 @@ We can then load the information using
 ```
 pl_index_file <- "index_plates.csv"
 pl_index <- read.csv2(pl_index_file, stringsAsFactors=FALSE, comment.char="#")
-pl_info <- pl_index %>% select(dir, antibiotic, date, author)
+pl_info <- pl_index %>% select(dir, empty, condition, date)
 ```
 
-Please notice that the structure of the file is arbitrary and it can be adapted to the user needs. But be aware that if at the end you want to merge this information with the final output of the algorithm, you need the field \empth{dir}, which must be written as absolute directory.
+Please notice that the structure of the file is arbitrary and it can be adapted to the user needs. But be aware that if at the end you want to merge this information with the final output of the algorithm, you need the field \emph{dir}, which must be written as absolute directory.
 
 ## Preprocessing step
-The filtering on the scattering is the most intensive part and it requires quite long time to be executed. To increase the speed, we can use the function \empth{plan} from the package \empth{furrr} (see the example file).
+The filtering on the scattering is the most intensive part and it requires quite long time to be executed. To increase the speed, we can use the function \emph{plan} from the package \emph{furrr} (see the example file).
 
 ### Starting the preprocessing
 To start the preprocessing it is enough to call the function 
@@ -135,7 +135,7 @@ For our example we would write
 processed <- analyse_raw(pl_info$dir, data2preproc, .f_par=f_par)
 ```
 
-\empth{Processed} is a dataframe containing different summary statistics of the populations of cells.
+\emph{Processed} is a dataframe containing different summary statistics of the populations of cells.
 
 ### Add additional information
 Now you may want to add additional information to the statistics, for example the date, author and condition. If the information applies to whole directories, the easiest way to do this is to use the function \emph{propagate_index_info} which merges the information with the output of the algorithm by matching the column \emph{dir}. In our example we have dates, antbiotic and author stored in the tibble \emph{pl_info} and their values are the same inside a specific director; we merge them using
