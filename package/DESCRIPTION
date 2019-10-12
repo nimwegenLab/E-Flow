@@ -17,9 +17,8 @@ Imports:
     flowCore,
     Rcpp,
     maxLik,
-    foreach,
     RcppEigen,
-    doParallel
+    furrr
 Suggests:
     knitr,
     rmarkdown

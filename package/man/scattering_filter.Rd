@@ -5,7 +5,7 @@
 \title{Filtering of FCM files based on their scattering profile.}
 \usage{
 scattering_filter(.dirs, .data2preproc, .f_par, .filter_preproc_namer,
-  .preproc_script, .jobs_cmd_name, .force)
+  .preproc_func, .force)
 }
 \value{
 The function doesn't return any value, but it saves the statistics of

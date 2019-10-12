@@ -6,7 +6,7 @@
 \usage{
 analyse_raw(.dirs, .data2preproc, .filter_preproc_namer = (function(.d)
   sub("fcs$", "RData", .d)), .f_par, .force = FALSE,
-  .preproc_script = "preproc.R", .jobs_cmd_name = "filtering_cmd")
+  .preproc_func = NULL)
 }
 \arguments{
 \item{.dirs}{List of directories containing the files to be preprocessed.}
@@ -40,13 +40,6 @@ analysed. Useful if the directories contain files that must not be analysed.
 These are, in order: mean, error of the mean, standard deviation, error of the standard deviation. 
 These can be computed with the function get_autofluo_stats()}}
 
-\item{.preproc_script}{Name of the script that perform the filtering of the
-scattering signals and the lognormal fit of the fluorescence. Deafult to
-\emph{preproc.R}.}
-
-\item{.jobs_cmd_name}{Name of the file where to store the list of commands to
-send to the cluster. Default to \emph{filtering_cmd}}
-
 \item{.cache_namer}{Function that takes the directory name where to store the
 preprocessed files and returns the name and path of a Rdata file where to
 store the preprocessed data of all the files in the directory. By default,
@@ -68,6 +61,13 @@ goes through be displayed? Default to FALSE}
 cells which survived the scattering filter (i.e. viable cells) be dropped
 and only the summary statistics be returned? Dropping them can save space
 and make the algorithm faster. Default to TRUE.}
+
+\item{.preproc_script}{Name of the script that perform the filtering of the
+scattering signals and the lognormal fit of the fluorescence. Deafult to
+\emph{preproc.R}.}
+
+\item{.jobs_cmd_name}{Name of the file where to store the list of commands to
+send to the cluster. Default to \emph{filtering_cmd}}
 
 \item{.use_doParallel}{If TRUE take advantage of the package doParallel to
 spped up the code by exploiting half of the cores of the local machine. The
